@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-func handleSearch(ctx context.Context, api *DabAPI, query string, searchType string, debug bool) ([]interface{}, []string, error) {
+func handleSearch(ctx context.Context, api *DabAPI, query string, searchType string, debug bool, auto bool) ([]interface{}, []string, error) {
 	colorInfo.Printf("🔎 Searching for '%s' (type: %s)...", query, searchType)
 
 	results, err := api.Search(ctx, query, searchType, 10)
@@ -17,6 +17,22 @@ func handleSearch(ctx context.Context, api *DabAPI, query string, searchType str
 	if totalResults == 0 {
 		colorWarning.Println("No results found.")
 		return nil, nil, nil
+	}
+
+	if auto {
+		var selectedItems []interface{}
+		var itemTypes []string
+		if len(results.Artists) > 0 {
+			selectedItems = append(selectedItems, results.Artists[0])
+			itemTypes = append(itemTypes, "artist")
+		} else if len(results.Albums) > 0 {
+			selectedItems = append(selectedItems, results.Albums[0])
+			itemTypes = append(itemTypes, "album")
+		} else if len(results.Tracks) > 0 {
+			selectedItems = append(selectedItems, results.Tracks[0])
+			itemTypes = append(itemTypes, "track")
+		}
+		return selectedItems, itemTypes, nil
 	}
 
 	colorInfo.Printf("Found %d results:\n", totalResults)

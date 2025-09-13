@@ -14,9 +14,14 @@ const (
 
 // Configuration structure
 type Config struct {
-	APIURL           string
-	DownloadLocation string
-	Parallelism      int
+	APIURL              string
+	DownloadLocation    string
+	Parallelism         int
+	SpotifyClientID     string
+	SpotifyClientSecret string
+	NavidromeURL        string
+	NavidromeUsername   string
+	NavidromePassword   string
 }
 
 // API client structure
