@@ -99,6 +99,22 @@ When downloading an artist's discography, you can choose between interactive and
   ./dab-downloader artist <artist_id> --filter=all --no-confirm
   ```
 
+#### Navidrome Integration
+
+The `dab-downloader` can also integrate with Navidrome to manage your music library.
+
+- **Copy a Spotify playlist to Navidrome:**
+  ```bash
+  ./dab-downloader navidrome <spotify_playlist_url>
+  ```
+  This command will search for tracks from the Spotify playlist in your Navidrome library. If a track is not found in Navidrome, it will attempt to download it via DAB and then add it to Navidrome.
+
+- **Add songs to an existing Navidrome playlist:**
+  ```bash
+  ./dab-downloader add-to-playlist <playlist_id> <song_id_1> [song_id_2...]
+  ```
+  This allows you to add one or more songs (by their Navidrome song IDs) to a specified Navidrome playlist.
+
 #### Download Dashboard
 
 When downloading an album or an artist's discography, you will see a detailed download dashboard with individual progress bars for each track, including download speed and ETA.
@@ -128,7 +144,7 @@ Your responses will be saved to `config.json` for future runs. This file is auto
 
 ### Example Configuration
 
-An `example-config.json` file is provided in the project root, which you can copy and modify to create your `config.json`.
+An `example-config.json` file is provided in the project root, which you can copy and modify to create your `config.json`. **Remember to rename `example-config.json` to `config.json` for the application to use it.**
 
 ```json
 {
