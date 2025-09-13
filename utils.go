@@ -29,7 +29,7 @@ func GetUserInput(prompt, defaultValue string) string {
 // SanitizeFileName cleans a string to make it safe for use as a file name
 func SanitizeFileName(name string) string {
 	// Replace invalid characters with underscores
-	invalidChars := []string{"<", ">", ":", \"", "/", \\", "|", "?", "*", "\x00"}
+	invalidChars := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*", "\x00"}
 	result := name
 	for _, char := range invalidChars {
 		result = strings.ReplaceAll(result, char, "_")

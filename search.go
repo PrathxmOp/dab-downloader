@@ -3,21 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
-	"strconv"
 )
 
-func handleSearch(ctx context.Context, api *DabAPI, query string, searchType string, debug bool) (interface{}, string, error) {
+func handleSearch(ctx context.Context, api *DabAPI, query string, searchType string, debug bool) ([]interface{}, []string, error) {
 	colorInfo.Printf("🔎 Searching for '%s' (type: %s)...", query, searchType)
 
 	results, err := api.Search(ctx, query, searchType, 10)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	totalResults := len(results.Artists) + len(results.Albums) + len(results.Tracks)
 	if totalResults == 0 {
 		colorWarning.Println("No results found.")
-		return nil, "", nil
+		return nil, nil, nil
 	}
 
 	colorInfo.Printf("Found %d results:\n", totalResults)
@@ -47,36 +46,40 @@ func handleSearch(ctx context.Context, api *DabAPI, query string, searchType str
 	}
 
 	// Prompt for selection
-	selectionStr := GetUserInput("\nEnter number to download (or 'q' to quit)", "")
+	selectionStr := GetUserInput("\nEnter numbers to download (e.g., '1,3,5-7' or 'q' to quit)", "")
 	if selectionStr == "q" || selectionStr == "" {
-		return nil, "", nil
+		return nil, nil, nil
 	}
 
-	selection, err := strconv.Atoi(selectionStr)
-	if err != nil || selection < 1 || selection >= counter {
-		return nil, "", fmt.Errorf("invalid selection")
+	selectedIndices, err := ParseSelectionInput(selectionStr, totalResults)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid selection: %w", err)
 	}
 
-	// Return selected item
-	selectedIndex := selection - 1
-	if selectedIndex < len(results.Artists) {
-		artist := results.Artists[selectedIndex]
-		return artist, "artist", nil
-	} else {
-		selectedIndex -= len(results.Artists)
+	var selectedItems []interface{}
+	var itemTypes []string
+
+	for _, selectedIndex := range selectedIndices {
+		index := selectedIndex - 1
+		if index < len(results.Artists) {
+			selectedItems = append(selectedItems, results.Artists[index])
+			itemTypes = append(itemTypes, "artist")
+		} else {
+			index -= len(results.Artists)
+			if index < len(results.Albums) {
+				selectedItems = append(selectedItems, results.Albums[index])
+				itemTypes = append(itemTypes, "album")
+			} else {
+				index -= len(results.Albums)
+				if index < len(results.Tracks) {
+					selectedItems = append(selectedItems, results.Tracks[index])
+					itemTypes = append(itemTypes, "track")
+				} else {
+					return nil, nil, fmt.Errorf("invalid index %d after parsing", selectedIndex)
+				}
+			}
+		}
 	}
 
-	if selectedIndex < len(results.Albums) {
-		album := results.Albums[selectedIndex]
-		return album, "album", nil
-	} else {
-		selectedIndex -= len(results.Albums)
-	}
-
-	if selectedIndex < len(results.Tracks) {
-		track := results.Tracks[selectedIndex]
-		return track, "track", nil
-	}
-
-	return nil, "", fmt.Errorf("invalid selection")
+	return selectedItems, itemTypes, nil
 }

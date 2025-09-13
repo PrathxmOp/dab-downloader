@@ -69,8 +69,6 @@ var albumCmd = &cobra.Command{
 	},
 }
 
-
-
 var searchCmd = &cobra.Command{
 	Use:   "search [query]",
 	Short: "Search for artists, albums, or tracks.",
@@ -78,43 +76,46 @@ var searchCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		config, api := initConfigAndAPI() // Get config for parallelism
 		query := args[0]
-		selectedItem, itemType, err := handleSearch(context.Background(), api, query, searchType, debug)
+		selectedItems, itemTypes, err := handleSearch(context.Background(), api, query, searchType, debug)
 		if err != nil {
 			colorError.Printf("❌ Search failed: %v\n", err)
 			return
 		}
-		if selectedItem == nil { // User quit or no results
+		if len(selectedItems) == 0 { // User quit or no results
 			return
 		}
 
-		switch itemType {
-		case "artist":
-			artist := selectedItem.(Artist)
-			colorInfo.Println("🎵 Starting artist discography download for:", artist.Name)
-			if err := api.DownloadArtistDiscography(context.Background(), artist.ID, debug, filter, noConfirm); err != nil {
-				colorError.Printf("❌ Failed to download discography for %s: %v\n", artist.Name, err)
-			} else {
-				colorSuccess.Println("✅ Discography download completed for", artist.Name)
+		for i, selectedItem := range selectedItems {
+			itemType := itemTypes[i]
+			switch itemType {
+			case "artist":
+				artist := selectedItem.(Artist)
+				colorInfo.Println("🎵 Starting artist discography download for:", artist.Name)
+				if err := api.DownloadArtistDiscography(context.Background(), artist.ID, debug, filter, noConfirm); err != nil {
+					colorError.Printf("❌ Failed to download discography for %s: %v\n", artist.Name, err)
+				} else {
+					colorSuccess.Println("✅ Discography download completed for", artist.Name)
+				}
+			case "album":
+				album := selectedItem.(Album)
+				colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
+				if _, err := api.DownloadAlbum(context.Background(), album.ID, config.Parallelism, debug, nil); err != nil {
+					colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
+				} else {
+					colorSuccess.Println("✅ Album download completed for", album.Title)
+				}
+			case "track":
+				track := selectedItem.(Track)
+				colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
+				// Now call the modified DownloadSingleTrack which expects a Track object
+				if err := api.DownloadSingleTrack(context.Background(), track, debug); err != nil {
+					colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
+				} else {
+					colorSuccess.Println("✅ Track download completed for", track.Title)
+				}
+			default:
+				colorError.Println("❌ Unknown item type selected.")
 			}
-		case "album":
-			album := selectedItem.(Album)
-			colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
-			if _, err := api.DownloadAlbum(context.Background(), album.ID, config.Parallelism, debug, nil); err != nil {
-				colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
-			} else {
-				colorSuccess.Println("✅ Album download completed for", album.Title)
-			}
-		case "track":
-			track := selectedItem.(Track)
-			colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
-			// Now call the modified DownloadSingleTrack which expects a Track object
-			if err := api.DownloadSingleTrack(context.Background(), track, debug); err != nil {
-				colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
-			} else {
-				colorSuccess.Println("✅ Track download completed for", track.Title)
-			}
-		default:
-			colorError.Println("❌ Unknown item type selected.")
 		}
 	},
 }
