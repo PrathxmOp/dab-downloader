@@ -1,0 +1,5 @@
+{
+  "APIURL": "https://dab.yeet.su",
+  "DownloadLocation": "/home/user/Music",
+  "Parallelism": 5
+}

@@ -1,0 +1,220 @@
+# Enhanced DAB Music Downloader v3.0
+
+A modular, high-quality FLAC music downloader with comprehensive metadata support for the DAB API.
+
+## Features
+
+- **Search**: Search for artists, albums, and tracks directly from the CLI.
+- **Complete Discography Downloads**: Download entire artist discographies with smart categorization.
+- **Comprehensive Metadata**: Full metadata support including genre, composer, producer, ISRC, copyright, and more.
+- **Smart Album Detection**: Automatically categorizes albums, EPs, and singles.
+- **Duplicate Detection**: Checks for existing downloads and skips duplicates.
+- **Cover Art Support**: Downloads and embeds high-quality cover art.
+- **Concurrent Downloads**: Fast parallel downloading with a detailed progress dashboard.
+- **Retry Logic**: Robust error handling with automatic retries.
+- **Modular Architecture**: Clean, maintainable code structure.
+
+## Project Structure
+
+```
+dab-downloader/
+├── main.go              # Entry point and command-line interface
+├── search.go            # Search command logic
+├── types.go             # Data structures and types
+├── api.go               # API client methods
+├── downloader.go        # Core download logic
+├── artist_downloader.go # Artist discography handling
+├── metadata.go          # FLAC metadata processing
+├── utils.go             # Utility functions
+├── go.mod              # Go module dependencies
+└── README.md           # This file
+```
+
+## Installation
+
+1. **Install Go** (version 1.19 or later)
+   ```bash
+   # Download from https://golang.org/dl/
+   ```
+
+2. **Clone/Create the project**
+   ```bash
+   git clone https://github.com/your-username/dab-downloader.git
+   cd dab-downloader
+   ```
+
+3. **Build the application**
+   ```bash
+   go build -o dab-downloader
+   ```
+
+## Usage
+
+### Basic Commands
+
+- **Search for music:**
+  ```bash
+  ./dab-downloader search "query"
+  ```
+  You can also specify the type of content to search for:
+  ```bash
+  ./dab-downloader search "query" --type=artist
+  ./dab-downloader search "query" --type=album
+  ./dab-downloader search "query" --type=track
+  ```
+
+- **Download an album:**
+  ```bash
+  ./dab-downloader album <album_id>
+  ```
+
+
+
+- **Download an artist's discography:**
+  ```bash
+  ./dab-downloader artist <artist_id>
+  ```
+
+### Advanced Features
+
+#### Artist Discography Download
+
+When downloading an artist's discography, you can choose between interactive and non-interactive modes.
+
+- **Interactive Mode (default):**
+  ```bash
+  ./dab-downloader artist <artist_id>
+  ```
+  The application will prompt you to select what to download (all, albums, EPs, singles, or a custom selection).
+
+- **Non-Interactive Mode:**
+  Use the `--filter` flag to specify what to download without any prompts.
+  ```bash
+  ./dab-downloader artist <artist_id> --filter=albums,eps
+  ```
+  Available filter options: `albums`, `eps`, `singles`.
+
+  You can also skip the confirmation prompt using the `--no-confirm` flag:
+  ```bash
+  ./dab-downloader artist <artist_id> --filter=all --no-confirm
+  ```
+
+#### Download Dashboard
+
+When downloading an album or an artist's discography, you will see a detailed download dashboard with individual progress bars for each track, including download speed and ETA.
+
+#### Metadata Features
+
+Each downloaded track includes:
+- **Basic Tags**: Title, Artist, Album, Track Number
+- **Advanced Tags**: Genre, Composer, Producer, Year, ISRC
+- **Album Information**: Album Artist, Total Tracks, Disc Numbers
+- **Technical Tags**: Encoder info, Source, Duration
+- **Cover Art**: Embedded high-quality album artwork
+
+## Configuration
+
+The `dab-downloader` uses a `config.json` file located in the same directory as the executable for its settings.
+
+### First Run Setup
+
+On the first run, if `config.json` does not exist, the application will interactively prompt you for the following essential settings:
+
+- **DAB API URL**: The URL of the DAB API endpoint (e.g., `https://dab.yeet.su`).
+- **Download Location**: The default directory where downloaded music will be saved (e.g., `/home/user/Music`).
+- **Parallel Downloads**: The number of tracks to download concurrently (default: `5`).
+
+Your responses will be saved to `config.json` for future runs. This file is automatically added to `.gitignore` to prevent it from being committed to version control.
+
+### Example Configuration
+
+An `example-config.json` file is provided in the project root, which you can copy and modify to create your `config.json`.
+
+```json
+{
+  "APIURL": "https://dab.yeet.su",
+  "DownloadLocation": "/home/user/Music",
+  "Parallelism": 5
+}
+```
+
+### Command-line Flags
+
+You can override the configuration file settings using command-line flags:
+- `--api-url`: Set the DAB API URL.
+- `--download-location`: Set the directory to save downloads.
+- `--debug`: Enable debug logging.
+
+### Directory Structure
+
+Downloads are organized as:
+```
+Music/
+├── Artist Name/
+│   ├── artist.jpg          # Artist photo
+│   ├── Album 1/
+│   │   ├── cover.jpg       # Album cover
+│   │   ├── 01 - Track 1.flac
+│   │   └── 02 - Track 2.flac
+│   ├── EP Name/
+│   │   └── ...
+│   └── Singles/
+│       └── Single Track.flac
+```
+
+### Quality Settings
+
+- **Audio Quality**: Highest available FLAC (quality level 27)
+- **Cover Art**: Original resolution, auto-format detection
+- **Metadata**: Comprehensive Vorbis comments with all available fields
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"Failed to get album/artist/track"**
+   - Verify the ID is correct.
+   - Check your internet connection.
+   - Ensure the DAB API is accessible.
+
+2. **"Failed to create directory"**
+   - Check disk space.
+   - Verify write permissions.
+   - Ensure the path is valid.
+
+3. **"Download failed" or timeout errors**
+   - The application will automatically retry failed downloads.
+   - Check your internet connection stability.
+   - Some tracks may be unavailable.
+
+4. **Progress bars not displaying correctly**
+   - If you are not seeing the progress bars, try running the application with the `--debug` flag and provide the output when reporting an issue.
+
+### Performance Tips
+
+- **Concurrent Downloads**: The app downloads multiple tracks simultaneously by default.
+- **Large Discographies**: The app handles large collections efficiently with a detailed progress dashboard.
+- **Network Issues**: Built-in retry logic handles temporary network problems.
+
+## API Information
+
+This downloader works with the DAB (Deemix Alternative Backend) API:
+- **Default Endpoint**: https://dab.yeet.su
+- **Required IDs**: Album IDs, Track IDs, Artist IDs from the DAB service.
+- **Quality**: Downloads highest quality FLAC files available.
+
+## Legal Notice
+
+This tool is for educational purposes only. Users are responsible for complying with all applicable laws and terms of service. Only download content you have the legal right to access.
+
+## Contributing
+
+The modular structure makes it easy to contribute:
+- **api.go**: Add new API endpoints or improve error handling.
+- **metadata.go**: Enhance metadata processing or add new fields.
+- **downloader.go**: Improve download logic or add features.
+- **utils.go**: Add utility functions.
+
+## License
+
+This project is provided as-is for educational purposes.
