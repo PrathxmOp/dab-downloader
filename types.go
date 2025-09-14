@@ -15,16 +15,17 @@ const (
 
 // Configuration structure
 type Config struct {
-	APIURL              string
-	DownloadLocation    string
-	Parallelism         int
-	SpotifyClientID     string
-	SpotifyClientSecret string
-	NavidromeURL        string
-	NavidromeUsername   string
-	NavidromePassword   string
-	Format              string
-	Bitrate             string
+	APIURL              string `json:"APIURL"`
+	DownloadLocation    string `json:"DownloadLocation"`
+	Parallelism         int    `json:"Parallelism"`
+	SpotifyClientID     string `json:"SpotifyClientID"`
+	SpotifyClientSecret string `json:"SpotifyClientSecret"`
+	NavidromeURL        string `json:"NavidromeURL"`
+	NavidromeUsername   string `json:"NavidromeUsername"`
+	NavidromePassword   string `json:"NavidromePassword"`
+	Format              string `json:"Format"`
+	Bitrate             string `json:"Bitrate"`
+	Debug               bool   `json:"Debug"`
 }
 
 // API client structure

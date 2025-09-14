@@ -439,6 +439,7 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 		APIURL:           "https://dab.yeet.su",
 		DownloadLocation: filepath.Join(os.Getenv("HOME"), "Music"),
 		Parallelism:      5,
+		Debug:            debug,
 	}
 
 	// Define the config file path in the current directory
@@ -478,6 +479,9 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 		config.Format = GetUserInput("Enter default output format (e.g., flac, mp3, ogg, opus)", "flac")
 		config.Bitrate = GetUserInput("Enter default bitrate for lossy formats (e.g., 320)", "320")
 
+		// Prompt for Debug
+		config.Debug, _ = strconv.ParseBool(GetUserInput("Enable debug mode (true/false)", "false"))
+
 		// Save the new config
 		if err := SaveConfig(configFile, config); err != nil {
 			colorError.Printf("❌ Failed to save initial config: %v\n", err)
@@ -496,6 +500,9 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 			}
 			if config.Bitrate == "" {
 				config.Bitrate = "320"
+			}
+			if !debug {
+				config.Debug = false
 			}
 		}
 	}
@@ -521,6 +528,9 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 	}
 	if navidromePassword != "" {
 		config.NavidromePassword = navidromePassword
+	}
+	if debug {
+		config.Debug = debug
 	}
 
 	// Override config with command-line flags if provided
