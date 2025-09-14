@@ -50,43 +50,16 @@ jobs:
         git tag ${{ env.TAG_NAME }}
         git push origin ${{ env.TAG_NAME }}
 
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ env.TAG_NAME }}
-        release_name: Release ${{ env.TAG_NAME }}
+        name: Release ${{ env.TAG_NAME }}
         draft: false
         prerelease: false
-
-    - name: Upload Release Asset Linux
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dab-downloader-linux-amd64
-        asset_name: dab-downloader-linux-amd64
-        asset_content_type: application/octet-stream
-
-    - name: Upload Release Asset Windows
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dab-downloader-windows-amd64.exe
-        asset_name: dab-downloader-windows-amd64.exe
-        asset_content_type: application/octet-stream
-
-    - name: Upload Release Asset macOS
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dab-downloader-macos-amd64
-        asset_name: dab-downloader-macos-amd64
-        asset_content_type: application/octet-stream
+        files: |
+          ./dab-downloader-linux-amd64
+          ./dab-downloader-windows-amd64.exe
+          ./dab-downloader-macos-amd64
