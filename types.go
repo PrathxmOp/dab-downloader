@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -134,3 +135,6 @@ type trackError struct {
 	Title string
 	Err   error
 }
+
+// ErrDownloadCancelled is returned when the user explicitly cancels a download operation.
+var ErrDownloadCancelled = fmt.Errorf("download cancelled by user")

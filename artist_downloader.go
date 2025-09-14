@@ -69,7 +69,12 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 		fmt.Println("4) Only singles")
 		fmt.Println("5) Custom selection")
 
-		choice := GetUserInput("Choose option (1-5)", "1")
+		choice := GetUserInput("Choose option (1-5, or q to quit)", "1")
+
+		if strings.ToLower(choice) == "q" {
+			colorWarning.Println("⚠️ Download cancelled by user.")
+			return ErrDownloadCancelled
+		}
 
 		switch choice {
 		case "1":
@@ -85,9 +90,13 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 			itemsToDownload = singles
 		case "5":
 			itemsToDownload = api.getCustomSelection(albums, eps, singles, other)
+			if itemsToDownload == nil {
+				colorWarning.Println("⚠️ Download cancelled by user.")
+				return ErrDownloadCancelled
+			}
 		default:
 			colorError.Println("❌ Invalid option, please try again.")
-			return nil
+			return fmt.Errorf("invalid selection option")
 		}
 	}
 
@@ -199,8 +208,8 @@ func (api *DabAPI) getCustomSelection(albums, eps, singles, other []Album) []Alb
 	}
 
 	for {
-		input := GetUserInput("Enter selection (e.g., 1-5 | 1,5 | 1)", "none")
-		if strings.ToLower(input) == "none" {
+		input := GetUserInput("Enter selection (e.g., 1-5 | 1,5 | 1, or q to quit)", "none")
+		if strings.ToLower(input) == "none" || strings.ToLower(input) == "q" {
 			return nil
 		}
 

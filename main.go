@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const toolVersion = "2.0.0" // Example version, can be updated
+const toolVersion = "3.0.0" // Example version, can be updated
 const authorName = "Prathxm"
 
 var (
@@ -54,7 +55,11 @@ var artistCmd = &cobra.Command{
 		artistID := args[0]
 		colorInfo.Println("🎵 Starting artist discography download for ID:", artistID)
 		if err := api.DownloadArtistDiscography(context.Background(), artistID, debug, filter, noConfirm); err != nil {
-			colorError.Printf("❌ Failed to download discography: %v\n", err)
+			if errors.Is(err, ErrDownloadCancelled) {
+				colorWarning.Println("⚠️ Discography download cancelled by user.")
+			} else {
+				colorError.Printf("❌ Failed to download discography: %v\n", err)
+			}
 		} else {
 			colorSuccess.Println("✅ Discography download completed!")
 		}
@@ -336,6 +341,44 @@ var addToPlaylistCmd = &cobra.Command{
 	},
 }
 
+var debugCmd = &cobra.Command{
+	Use:   "debug",
+	Short: "Run various debugging utilities.",
+	Long:  "Provides commands to test API connectivity and artist endpoint formats.",
+}
+
+var testApiAvailabilityCmd = &cobra.Command{
+	Use:   "api-availability",
+	Short: "Test basic DAB API connectivity.",
+	Run: func(cmd *cobra.Command, args []string) {
+		_, api := initConfigAndAPI()
+		api.TestAPIAvailability(context.Background())
+	},
+}
+
+var testArtistEndpointsCmd = &cobra.Command{
+	Use:   "artist-endpoints [artist_id]",
+	Short: "Test different artist endpoint formats for a given artist ID.",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		_, api := initConfigAndAPI()
+		artistID := args[0]
+		api.TestArtistEndpoints(context.Background(), artistID)
+	},
+}
+
+var comprehensiveArtistDebugCmd = &cobra.Command{
+	Use:   "comprehensive-artist-debug [artist_id]",
+	Short: "Perform comprehensive debugging for an artist ID (API connectivity, endpoint formats, and ID type checks).",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		_, api := initConfigAndAPI()
+		artistID := args[0]
+		api.DebugArtistID(context.Background(), artistID)
+	},
+}
+
+
 
 func initConfigAndAPI() (*Config, *DabAPI) {
 	config := &Config{
@@ -445,6 +488,11 @@ func init() {
 	rootCmd.AddCommand(spotifyCmd)
 	rootCmd.AddCommand(navidromeCmd)
 	rootCmd.AddCommand(addToPlaylistCmd)
+	rootCmd.AddCommand(debugCmd)
+
+	debugCmd.AddCommand(testApiAvailabilityCmd)
+	debugCmd.AddCommand(testArtistEndpointsCmd)
+	debugCmd.AddCommand(comprehensiveArtistDebugCmd)
 }
 
 func main() {

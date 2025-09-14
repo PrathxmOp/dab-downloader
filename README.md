@@ -26,6 +26,13 @@ dab-downloader/
 ├── artist_downloader.go # Artist discography handling
 ├── metadata.go          # FLAC metadata processing
 ├── utils.go             # Utility functions
+├── colours.go           # Color utility functions
+├── debug.go             # Debugging utilities
+├── navidrome.go         # Navidrome API client methods
+├── navidrome_types.go   # Navidrome data structures and types
+├── retry.go             # Retry logic utility
+├── spotify.go           # Spotify API client methods
+├── spotify_types.go     # Spotify data structures and types
 ├── go.mod              # Go module dependencies
 └── README.md           # This file
 ```
@@ -194,7 +201,11 @@ An `example-config.json` file is provided in the project root, which you can cop
 You can override the configuration file settings using command-line flags:
 - `--api-url`: Set the DAB API URL.
 - `--download-location`: Set the directory to save downloads.
-- `--debug`: Enable debug logging.
+- `--debug`: Enable verbose debug logging for internal operations.
+- `debug`: A new command with subcommands for various debugging utilities:
+  - `api-availability`: Test basic DAB API connectivity.
+  - `artist-endpoints <artist_id>`: Test different artist endpoint formats for a given artist ID.
+  - `comprehensive-artist-debug <artist_id>`: Perform comprehensive debugging for an artist ID (API connectivity, endpoint formats, and ID type checks).
 
 ### Directory Structure
 
