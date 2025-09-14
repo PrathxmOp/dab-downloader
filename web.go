@@ -35,9 +35,15 @@ type DownloadResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
-type SearchResponse struct {
-	Tracks []Track `json:"tracks"`
-	Error  string  `json:"error,omitempty"`
+// Structures for the new search response
+type SpotifyTrackWithDABResults struct {
+	SpotifyTrack SpotifyTrack `json:"spotify_track"`
+	DABResults   []Track      `json:"dab_results"`
+}
+
+type SpotifySearchResponse struct {
+	Tracks []SpotifyTrackWithDABResults `json:"tracks"`
+	Error  string                       `json:"error,omitempty"`
 }
 
 func startWebServer() {
@@ -72,13 +78,11 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 
 	config, api := initConfigAndAPI()
 
-	var tracks []Track
-
 	if strings.Contains(req.URL, "spotify.com") {
 		spotifyClient := NewSpotifyClient(config.SpotifyClientID, config.SpotifyClientSecret)
 		if err := spotifyClient.Authenticate(); err != nil {
 			colorError.Printf("❌ Failed to authenticate with Spotify: %v\n", err)
-			writeSearchResponse(w, nil, "Failed to authenticate with Spotify")
+			writeSpotifySearchResponse(w, nil, "Failed to authenticate with Spotify")
 			return
 		}
 
@@ -96,29 +100,33 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 				spotifyTracks = append(spotifyTracks, *track)
 			}
 		} else {
-			writeSearchResponse(w, nil, "Invalid Spotify URL. Please provide a playlist, album, or track URL.")
+			writeSpotifySearchResponse(w, nil, "Invalid Spotify URL. Please provide a playlist, album, or track URL.")
 			return
 		}
 
 		if err != nil {
-			writeSearchResponse(w, nil, fmt.Sprintf("Failed to get tracks from Spotify: %v", err))
+			writeSpotifySearchResponse(w, nil, fmt.Sprintf("Failed to get tracks from Spotify: %v", err))
 			return
 		}
 
+		var results []SpotifyTrackWithDABResults
 		for _, spotifyTrack := range spotifyTracks {
 			query := spotifyTrack.Name + " - " + spotifyTrack.Artist
-			// This is a placeholder for the new search function
-			foundTracks, err := searchAndGetTracks(context.Background(), api, query, "track", debug, true)
+			dabTracks, err := searchAndGetTracks(context.Background(), api, query, "track", debug, true)
 			if err != nil {
 				colorError.Printf("❌ Search failed for track %s: %v\n", query, err)
-				continue
+				// even if search fails, we still want to show the spotify track in the UI
 			}
-			tracks = append(tracks, foundTracks...)
+
+			results = append(results, SpotifyTrackWithDABResults{
+				SpotifyTrack: spotifyTrack,
+				DABResults:   dabTracks,
+			})
 		}
 
-		writeSearchResponse(w, tracks, "")
+		writeSpotifySearchResponse(w, results, "")
 	} else {
-		writeSearchResponse(w, nil, "Only Spotify URLs are currently supported.")
+		writeSpotifySearchResponse(w, nil, "Only Spotify URLs are currently supported.")
 	}
 }
 
@@ -238,9 +246,9 @@ func writeJSONResponse(w http.ResponseWriter, success bool, errorMsg string) {
 	}
 }
 
-func writeSearchResponse(w http.ResponseWriter, tracks []Track, errorMsg string) {
+func writeSpotifySearchResponse(w http.ResponseWriter, tracks []SpotifyTrackWithDABResults, errorMsg string) {
 	w.Header().Set("Content-Type", "application/json")
-	response := SearchResponse{
+	response := SpotifySearchResponse{
 		Tracks: tracks,
 		Error:  errorMsg,
 	}

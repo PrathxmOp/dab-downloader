@@ -13,8 +13,8 @@ import (
 
 // SpotifyTrack represents a track from Spotify
 type SpotifyTrack struct {
-	Name   string
-	Artist string
+	Name   string `json:"name"`
+	Artist string `json:"artist"`
 }
 
 // Authenticate authenticates the client with the spotify api

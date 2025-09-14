@@ -78,19 +78,39 @@ function renderTrackList(tracks) {
     const trackList = document.createElement('ul');
     trackList.className = 'track-list';
 
-    tracks.forEach(track => {
+    tracks.forEach((track, index) => {
         const listItem = document.createElement('li');
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.value = JSON.stringify(track);
-        checkbox.id = track.id;
+        
+        const spotifyTrackInfo = document.createElement('div');
+        spotifyTrackInfo.className = 'spotify-track-info';
+        spotifyTrackInfo.textContent = `${track.spotify_track.name} - ${track.spotify_track.artist}`;
+        listItem.appendChild(spotifyTrackInfo);
 
-        const label = document.createElement('label');
-        label.htmlFor = track.id;
-        label.textContent = `${track.title} - ${track.artist}`;
+        const dabResultsList = document.createElement('ul');
+        dabResultsList.className = 'dab-results-list';
 
-        listItem.appendChild(checkbox);
-        listItem.appendChild(label);
+        if (track.dab_results && track.dab_results.length > 0) {
+            track.dab_results.forEach(dabResult => {
+                const dabResultItem = document.createElement('li');
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = `spotify-track-${index}`;
+                radio.value = JSON.stringify(dabResult);
+
+                const label = document.createElement('label');
+                label.textContent = `${dabResult.title} - ${dabResult.artist}`;
+
+                dabResultItem.appendChild(radio);
+                dabResultItem.appendChild(label);
+                dabResultsList.appendChild(dabResultItem);
+            });
+        } else {
+            const noResultItem = document.createElement('li');
+            noResultItem.textContent = 'No DAB results found.';
+            dabResultsList.appendChild(noResultItem);
+        }
+
+        listItem.appendChild(dabResultsList);
         trackList.appendChild(listItem);
     });
 
@@ -103,9 +123,9 @@ function renderTrackList(tracks) {
 
     downloadSelectedBtn.addEventListener('click', () => {
         const selectedTracks = [];
-        const checkboxes = document.querySelectorAll('.track-list input[type="checkbox"]:checked');
-        checkboxes.forEach(checkbox => {
-            selectedTracks.push(JSON.parse(checkbox.value));
+        const radioButtons = document.querySelectorAll('.dab-results-list input[type="radio"]:checked');
+        radioButtons.forEach(radio => {
+            selectedTracks.push(JSON.parse(radio.value));
         });
 
         if (selectedTracks.length === 0) {

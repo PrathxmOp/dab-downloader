@@ -91,23 +91,37 @@ p {
 .track-list {
     list-style: none;
     padding: 0;
-    max-height: 300px;
+    max-height: 500px;
     overflow-y: auto;
 }
 
-.track-list li {
-    display: flex;
-    align-items: center;
+.track-list > li {
     padding: 10px;
     border-bottom: 1px solid #333;
 }
 
-.track-list li:last-child {
+.track-list > li:last-child {
     border-bottom: none;
 }
 
-.track-list input[type="checkbox"] {
-    margin-right: 15px;
+.spotify-track-info {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.dab-results-list {
+    list-style: none;
+    padding-left: 20px;
+}
+
+.dab-results-list li {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.dab-results-list input[type="radio"] {
+    margin-right: 10px;
 }
 
 #downloadSelectedBtn {
