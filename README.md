@@ -32,6 +32,10 @@ dab-downloader/
 
 ## Installation
 
+If you don't want to build from source, you can download the latest pre-built executables from the [GitHub Releases page](https://github.com/PrathxmOp/dab-downloader/releases).
+
+### Build from Source
+
 1. **Install Go** (version 1.19 or later)
    ```bash
    # Download from https://golang.org/dl/
