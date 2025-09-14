@@ -1,0 +1,141 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior
+title: "[BUG] "
+labels: ["bug", "needs-triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! Please provide as much detail as possible to help us resolve the issue quickly.
+
+  - type: checkboxes
+    id: preliminary-checks
+    attributes:
+      label: Preliminary Checks
+      description: Please confirm you've completed these steps before submitting
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I am using the latest version of DAB Music Downloader
+          required: true
+        - label: I have read the troubleshooting section in the README
+          required: true
+
+  - type: dropdown
+    id: installation-method
+    attributes:
+      label: Installation Method
+      description: How did you install DAB Music Downloader?
+      options:
+        - Pre-built binary (GitHub Releases)
+        - Built from source
+        - Docker/Docker Compose
+        - Other (please specify in description)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version are you running? (Use `--version` if available)
+      placeholder: "e.g., v3.0.1 or commit hash"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating System
+      description: What OS are you using?
+      options:
+        - Windows
+        - macOS
+        - Linux (Ubuntu/Debian)
+        - Linux (Arch/Manjaro)
+        - Linux (RHEL/CentOS/Fedora)
+        - Linux (Other)
+        - Docker Container
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is
+      placeholder: Describe what happened vs what you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior
+      placeholder: |
+        1. Run command '...'
+        2. Enter input '...'
+        3. See error
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What should have happened instead?
+      placeholder: A clear description of what you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: Error Output/Logs
+      description: If applicable, paste any error messages or log output
+      placeholder: Paste error messages, stack traces, or log output here
+      render: shell
+
+  - type: textarea
+    id: command-used
+    attributes:
+      label: Command Used
+      description: The exact command that triggered the issue
+      placeholder: "./dab-downloader album 123456"
+      render: shell
+
+  - type: textarea
+    id: config-file
+    attributes:
+      label: Configuration
+      description: Your config.json content (remove sensitive information like API keys)
+      placeholder: |
+        {
+          "APIURL": "https://dab.yeet.su",
+          "DownloadLocation": "/home/user/Music",
+          "Parallelism": 5
+        }
+      render: json
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem (screenshots, network conditions, etc.)
+      placeholder: Add any other context, screenshots, or relevant information
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Acknowledgments
+      options:
+        - label: I understand this is for educational purposes only
+          required: true
+        - label: I am reporting this issue in good faith to help improve the software
+          required: true

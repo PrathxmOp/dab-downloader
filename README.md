@@ -1,282 +1,266 @@
-# Enhanced DAB Music Downloader v3.0
+# 🎵 DAB Music Downloader
 
-A modular, high-quality FLAC music downloader with comprehensive metadata support for the DAB API.
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.19-blue.svg)](https://golang.org/dl/)
+[![License](https://img.shields.io/badge/license-Educational-green.svg)](#license)
+[![Release](https://img.shields.io/github/v/release/PrathxmOp/dab-downloader)](https://github.com/PrathxmOp/dab-downloader/releases)
 
-## Features
+> A powerful, modular music downloader that delivers high-quality FLAC files with comprehensive metadata support through the DAB API.
 
-- **Search**: Search for artists, albums, and tracks directly from the CLI.
-- **Complete Discography Downloads**: Download entire artist discographies with smart categorization.
-- **Comprehensive Metadata**: Full metadata support including genre, composer, producer, ISRC, copyright, and more.
-- **Smart Album Detection**: Automatically categorizes albums, EPs, and singles.
-- **Duplicate Detection**: Checks for existing downloads and skips duplicates.
-- **Cover Art Support**: Downloads and embeds high-quality cover art.
-- **Concurrent Downloads**: Fast parallel downloading with a detailed progress dashboard.
-- **Retry Logic**: Robust error handling with automatic retries.
-- **Modular Architecture**: Clean, maintainable code structure.
+## ✨ Key Features
 
-## Project Structure
-
-```
-dab-downloader/
-├── main.go              # Entry point and command-line interface
-├── search.go            # Search command logic
-├── types.go             # Data structures and types
-├── api.go               # API client methods
-├── downloader.go        # Core download logic
-├── artist_downloader.go # Artist discography handling
-├── metadata.go          # FLAC metadata processing
-├── utils.go             # Utility functions
-├── colours.go           # Color utility functions
-├── debug.go             # Debugging utilities
-├── navidrome.go         # Navidrome API client methods
-├── navidrome_types.go   # Navidrome data structures and types
-├── retry.go             # Retry logic utility
-├── spotify.go           # Spotify API client methods
-├── spotify_types.go     # Spotify data structures and types
-├── go.mod              # Go module dependencies
-└── README.md           # This file
-```
-
-## Installation
-
-If you don't want to build from source, you can download the latest pre-built executables from the [GitHub Releases page](https://github.com/PrathxmOp/dab-downloader/releases).
-
-### Build from Source
-
-1. **Install Go** (version 1.19 or later)
-   ```bash
-   # Download from https://golang.org/dl/
-   ```
-
-2. **Clone/Create the project**
-   ```bash
-   git clone https://github.com/your-username/dab-downloader.git
-   cd dab-downloader
-   ```
-
-3. **Initialize Go Modules and Build**
-   First, initialize and tidy up Go modules:
-   ```bash
-   go mod tidy
-   ```
-   Then, build the application:
-   ```bash
-   go build -o dab-downloader
-   ```
-
-## Usage
-
-### Basic Commands
-
-- **Search for music:**
-  ```bash
-  ./dab-downloader search "query"
-  ```
-  You can also specify the type of content to search for:
-  ```bash
-  ./dab-downloader search "query" --type=artist
-  ./dab-downloader search "query" --type=album
-  ./dab-downloader search "query" --type=track
-  ```
-
-- **Download an album:**
-  ```bash
-  ./dab-downloader album <album_id>
-  ```
+🔍 **Smart Search** - Find artists, albums, and tracks with intelligent filtering  
+📦 **Complete Discographies** - Download entire artist catalogs with automatic categorization  
+🏷️ **Rich Metadata** - Full tag support including genre, composer, producer, ISRC, and copyright  
+🎨 **High-Quality Artwork** - Embedded album covers in original resolution  
+⚡ **Concurrent Downloads** - Fast parallel processing with real-time progress tracking  
+🔄 **Intelligent Retry Logic** - Robust error handling for reliable downloads  
+🎧 **Spotify Integration** - Import and download entire Spotify playlists  
+📊 **Navidrome Support** - Seamless integration with your music server  
 
 
+## 🚀 Quick Start
 
-- **Download an artist's discography:**
-  ```bash
-  ./dab-downloader artist <artist_id>
-  ```
+### Option 1: Pre-built Binary (Recommended)
 
-### Advanced Features
+1. Download the latest release from our [GitHub Releases](https://github.com/PrathxmOp/dab-downloader/releases)
+2. Extract and run the executable
+3. Follow the interactive setup on first launch
 
-#### Spotify Playlist Downloader
+### Option 2: Build from Source
 
-The `dab-downloader` can download entire Spotify playlists. This feature requires Spotify API credentials (Client ID and Client Secret) which you can obtain from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/applications).
+**Prerequisites:**
+- Go 1.19 or later ([Download here](https://golang.org/dl/))
 
-**Configuration:**
-Ensure your `config.json` (or command-line flags) includes your Spotify Client ID and Client Secret:
-```json
-{
-  "SpotifyClientID": "YOUR_SPOTIFY_CLIENT_ID",
-  "SpotifyClientSecret": "YOUR_SPOTIFY_CLIENT_SECRET"
-}
-```
-
-**Usage:**
-To download a Spotify playlist, provide its URL:
 ```bash
-./dab-downloader spotify <spotify_playlist_url>
-```
-The application will fetch all tracks from the playlist, search for them on the DAB API, and download them.
+# Clone the repository
+git clone https://github.com/PrathxmOp/dab-downloader.git
+cd dab-downloader
 
-**Automatic Download:**
-You can use the `--auto` flag to automatically download the first matching result for each track without interactive selection:
+# Install dependencies and build
+go mod tidy
+go build -o dab-downloader
+```
+
+### Option 3: Docker (Containerized)
+
 ```bash
-./dab-downloader spotify <spotify_playlist_url> --auto
+# Build and run with Docker Compose
+docker compose build
+mkdir config music
+cp example-config.json config/config.json
+
+# Run any command
+docker compose run dab-downloader search "your favorite artist"
 ```
 
-#### Artist Discography Download
+## 📋 Usage Guide
 
-When downloading an artist's discography, you can choose between interactive and non-interactive modes.
+### 🔍 Search and Discover
 
-- **Interactive Mode (default):**
-  ```bash
-  ./dab-downloader artist <artist_id>
-  ```
-  The application will prompt you to select what to download (all, albums, EPs, singles, or a custom selection).
+```bash
+# General search
+./dab-downloader search "Arctic Monkeys"
 
-- **Non-Interactive Mode:**
-  Use the `--filter` flag to specify what to download without any prompts.
-  ```bash
-  ./dab-downloader artist <artist_id> --filter=albums,eps
-  ```
-  Available filter options: `albums`, `eps`, `singles`.
+# Targeted search
+./dab-downloader search "AM" --type=album
+./dab-downloader search "Do I Wanna Know" --type=track
+./dab-downloader search "Alex Turner" --type=artist
+```
 
-  You can also skip the confirmation prompt using the `--no-confirm` flag:
-  ```bash
-  ./dab-downloader artist <artist_id> --filter=all --no-confirm
-  ```
+### 📀 Download Content
 
-#### Navidrome Integration
+```bash
+# Download a specific album
+./dab-downloader album <album_id>
 
-The `dab-downloader` can also integrate with Navidrome to manage your music library.
+# Download artist's complete discography
+./dab-downloader artist <artist_id>
 
-- **Copy a Spotify playlist to Navidrome:**
-  ```bash
-  ./dab-downloader navidrome <spotify_playlist_url>
-  ```
-  This command will search for tracks from the Spotify playlist in your Navidrome library. If a track is not found in Navidrome, it will attempt to download it via DAB and then add it to Navidrome.
+# Download with filters (non-interactive)
+./dab-downloader artist <artist_id> --filter=albums,eps --no-confirm
+```
 
-- **Add songs to an existing Navidrome playlist:**
-  ```bash
-  ./dab-downloader add-to-playlist <playlist_id> <song_id_1> [song_id_2...]
-  ```
-  This allows you to add one or more songs (by their Navidrome song IDs) to a specified Navidrome playlist.
+### 🎧 Spotify Integration
 
-#### Download Dashboard
+**Setup:** Get your [Spotify API credentials](https://developer.spotify.com/dashboard/applications)
 
-When downloading an album or an artist's discography, you will see a detailed download dashboard with individual progress bars for each track, including download speed and ETA.
+```bash
+# Download entire Spotify playlist
+./dab-downloader spotify <playlist_url>
 
-#### Metadata Features
+# Auto-download (no manual selection)
+./dab-downloader spotify <playlist_url> --auto
+```
 
-Each downloaded track includes:
-- **Basic Tags**: Title, Artist, Album, Track Number
-- **Advanced Tags**: Genre, Composer, Producer, Year, ISRC
-- **Album Information**: Album Artist, Total Tracks, Disc Numbers
-- **Technical Tags**: Encoder info, Source, Duration
-- **Cover Art**: Embedded high-quality album artwork
+### 🎵 Navidrome Integration
 
-## Configuration
+```bash
+# Copy Spotify playlist to Navidrome
+./dab-downloader navidrome <spotify_playlist_url>
 
-The `dab-downloader` uses a `config.json` file located in the same directory as the executable for its settings.
+# Add songs to existing playlist
+./dab-downloader add-to-playlist <playlist_id> <song_id_1> <song_id_2>
+```
 
-### First Run Setup
+## ⚙️ Configuration
 
-On the first run, if `config.json` does not exist, the application will interactively prompt you for the following essential settings:
+### First-Time Setup
 
-- **DAB API URL**: The URL of the DAB API endpoint (e.g., `https://dab.yeet.su`).
-- **Download Location**: The default directory where downloaded music will be saved (e.g., `/home/user/Music`).
-- **Parallel Downloads**: The number of tracks to download concurrently (default: `5`).
+The application will guide you through initial configuration:
 
-Your responses will be saved to `config.json` for future runs. This file is automatically added to `.gitignore` to prevent it from being committed to version control.
+1. **DAB API URL** (e.g., `https://dab.yeet.su`)
+2. **Download Directory** (e.g., `/home/user/Music`)
+3. **Concurrent Downloads** (recommended: `5`)
 
-### Example Configuration
+### Configuration File
 
-An `example-config.json` file is provided in the project root, which you can copy and modify to create your `config.json`. **Remember to rename `example-config.json` to `config.json` for the application to use it.**
+Create or modify `config.json`:
 
 ```json
 {
   "APIURL": "https://dab.yeet.su",
   "DownloadLocation": "/home/user/Music",
-  "Parallelism": 5
+  "Parallelism": 5,
+  "SpotifyClientID": "your_spotify_client_id",
+  "SpotifyClientSecret": "your_spotify_client_secret"
 }
 ```
 
-### Command-line Flags
+### Command-Line Options
 
-You can override the configuration file settings using command-line flags:
-- `--api-url`: Set the DAB API URL.
-- `--download-location`: Set the directory to save downloads.
-- `--debug`: Enable verbose debug logging for internal operations.
-- `debug`: A new command with subcommands for various debugging utilities:
-  - `api-availability`: Test basic DAB API connectivity.
-  - `artist-endpoints <artist_id>`: Test different artist endpoint formats for a given artist ID.
-  - `comprehensive-artist-debug <artist_id>`: Perform comprehensive debugging for an artist ID (API connectivity, endpoint formats, and ID type checks).
+Override configuration with flags:
 
-### Directory Structure
+```bash
+--api-url           # Set DAB API endpoint
+--download-location # Set download directory  
+--debug            # Enable verbose logging
+--auto             # Auto-download first results
+--no-confirm       # Skip confirmation prompts
+```
 
-Downloads are organized as:
+## 📁 File Organization
+
+Your music library will be organized like this:
+
 ```
 Music/
-├── Artist Name/
-│   ├── artist.jpg          # Artist photo
-│   ├── Album 1/
-│   │   ├── cover.jpg       # Album cover
-│   │   ├── 01 - Track 1.flac
-│   │   └── 02 - Track 2.flac
-│   ├── EP Name/
+├── Arctic Monkeys/
+│   ├── artist.jpg
+│   ├── AM (2013)/
+│   │   ├── cover.jpg
+│   │   ├── 01 - Do I Wanna Know.flac
+│   │   └── 02 - R U Mine.flac
+│   ├── Humbug (2009)/
 │   │   └── ...
 │   └── Singles/
-│       └── Single Track.flac
+│       └── I Bet You Look Good on the Dancefloor.flac
 ```
 
-### Quality Settings
+## 🔧 Advanced Features
 
-- **Audio Quality**: Highest available FLAC (quality level 27)
-- **Cover Art**: Original resolution, auto-format detection
-- **Metadata**: Comprehensive Vorbis comments with all available fields
+### Debug Tools
 
-## Troubleshooting
+```bash
+# Test API connectivity
+./dab-downloader debug api-availability
 
-### Common Issues
+# Test artist endpoints
+./dab-downloader debug artist-endpoints <artist_id>
 
-1. **"Failed to get album/artist/track"**
-   - Verify the ID is correct.
-   - Check your internet connection.
-   - Ensure the DAB API is accessible.
+# Comprehensive debugging
+./dab-downloader debug comprehensive-artist-debug <artist_id>
+```
 
-2. **"Failed to create directory"**
-   - Check disk space.
-   - Verify write permissions.
-   - Ensure the path is valid.
+### Quality & Metadata
 
-3. **"Download failed" or timeout errors**
-   - The application will automatically retry failed downloads.
-   - Check your internet connection stability.
-   - Some tracks may be unavailable.
+- **Audio Format:** FLAC (highest quality available)
+- **Metadata Tags:** Title, Artist, Album, Genre, Year, ISRC, Producer, Composer
+- **Cover Art:** Original resolution, auto-format detection
+- **File Naming:** Consistent, organized structure
 
-4. **Progress bars not displaying correctly**
-   - If you are not seeing the progress bars, try running the application with the `--debug` flag and provide the output when reporting an issue.
+## 🐛 Troubleshooting
 
-### Performance Tips
+<details>
+<summary><strong>Common Issues & Solutions</strong></summary>
 
-- **Concurrent Downloads**: The app downloads multiple tracks simultaneously by default.
-- **Large Discographies**: The app handles large collections efficiently with a detailed progress dashboard.
-- **Network Issues**: Built-in retry logic handles temporary network problems.
+**"Failed to get album/artist/track"**
+- ✅ Verify the ID is correct
+- ✅ Check internet connection
+- ✅ Confirm DAB API accessibility
 
-## API Information
+**"Failed to create directory"**
+- ✅ Check available disk space
+- ✅ Verify write permissions
+- ✅ Ensure valid file path
 
-This downloader works with the DAB (Deemix Alternative Backend) API:
-- **Default Endpoint**: https://dab.yeet.su
-- **Required IDs**: Album IDs, Track IDs, Artist IDs from the DAB service.
-- **Quality**: Downloads highest quality FLAC files available.
+**"Download failed" or timeouts**
+- ✅ App auto-retries failed downloads
+- ✅ Check connection stability
+- ✅ Some tracks may be unavailable
 
-## Legal Notice
+**Progress bars not showing**
+- ✅ Run with `--debug` flag
+- ✅ Check terminal compatibility
+- ✅ Report output when filing issues
 
-This tool is for educational purposes only. Users are responsible for complying with all applicable laws and terms of service. Only download content you have the legal right to access.
+</details>
 
-## Contributing
+## 🏗️ Project Architecture
 
-The modular structure makes it easy to contribute:
-- **api.go**: Add new API endpoints or improve error handling.
-- **metadata.go**: Enhance metadata processing or add new fields.
-- **downloader.go**: Improve download logic or add features.
-- **utils.go**: Add utility functions.
+```
+dab-downloader/
+├── main.go              # CLI entry point
+├── search.go            # Search functionality
+├── api.go               # DAB API client
+├── downloader.go        # Download engine
+├── artist_downloader.go # Artist catalog handling
+├── metadata.go          # FLAC metadata processing
+├── spotify.go           # Spotify integration
+├── navidrome.go         # Navidrome integration
+├── utils.go             # Utility functions
+└── docker-compose.yml   # Container setup
+```
 
-## License
+## 🤝 Contributing
 
-This project is provided as-is for educational purposes.
+We welcome contributions! Here's how you can help:
+
+1. **🐛 Report bugs** - Use our issue templates
+2. **💡 Suggest features** - Share your ideas
+3. **🔧 Submit PRs** - Follow our contribution guidelines
+4. **📖 Improve docs** - Help make things clearer
+
+### Development Areas
+
+- **API Client** (`api.go`) - Enhance endpoints and error handling
+- **Metadata** (`metadata.go`) - Add new tag fields or formats
+- **Downloads** (`downloader.go`) - Improve performance and features
+- **Integrations** - Add support for new music services
+
+## ⚖️ Legal Notice
+
+This software is provided for **educational purposes only**. Users are responsible for:
+
+- ✅ Complying with all applicable laws
+- ✅ Respecting terms of service
+- ✅ Only downloading content you legally own or have permission to access
+
+## 📄 License
+
+This project is provided under an educational license. See the [LICENSE](LICENSE) file for details.
+
+## 🌟 Support the Project
+
+If you find this project helpful:
+
+- ⭐ Star this repository
+- 🐛 Report issues and bugs
+- 💡 Suggest new features
+- 🤝 Contribute code or documentation
+
+---
+
+<div align="center">
+  <strong>Made with ❤️ for music lovers</strong><br>
+  <sub>Download responsibly • Respect artists • Support music</sub>
+</div>

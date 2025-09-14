@@ -1,0 +1,79 @@
+name: ❓ Question / Support
+description: Ask a question or get help with usage
+title: "[QUESTION] "
+labels: ["question", "support"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about using DAB Music Downloader? We're here to help! 
+        
+        **Please check first:**
+        - [README documentation](https://github.com/PrathxmOp/dab-downloader#readme)
+        - [Troubleshooting section](https://github.com/PrathxmOp/dab-downloader#troubleshooting)
+        - [Existing discussions](https://github.com/PrathxmOp/dab-downloader/discussions)
+
+  - type: checkboxes
+    id: preliminary-checks
+    attributes:
+      label: I have checked
+      options:
+        - label: README and documentation
+          required: true
+        - label: Existing issues and discussions
+          required: true
+        - label: Troubleshooting guide
+          required: true
+
+  - type: dropdown
+    id: question-category
+    attributes:
+      label: Question Category
+      description: What area is your question about?
+      options:
+        - Installation and setup
+        - Basic usage and commands
+        - Configuration and settings
+        - Spotify integration
+        - Navidrome integration
+        - Docker usage
+        - Troubleshooting specific errors
+        - Performance and optimization
+        - Legal and ethical usage
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: Ask your question in detail
+      placeholder: "How do I configure Spotify integration? What credentials do I need?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-tried
+    attributes:
+      label: What Have You Tried?
+      description: What steps have you already taken to solve this?
+      placeholder: "I tried following the README but got stuck at..."
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Your setup, environment, or any other relevant details
+      placeholder: |
+        - OS: Windows 11
+        - Installation method: Pre-built binary
+        - What I'm trying to achieve: ...
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version are you using?
+      placeholder: "v3.0.1"

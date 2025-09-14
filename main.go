@@ -388,7 +388,7 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 	}
 
 	// Define the config file path in the current directory
-	configFile := "config.json" // Changed to current directory
+	configFile := filepath.Join("config", "config.json")
 
 	// Check if config file exists
 	if !FileExists(configFile) {

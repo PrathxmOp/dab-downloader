@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  dab-downloader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dab-downloader
+    volumes:
+      # Mount a local directory for configuration (e.g., config.json)
+      - ./config:/app/config
+      # Mount a local directory for downloaded music
+      - ./music:/app/music
+    # You can pass command-line arguments to the downloader here
+    # For example, to run a search:
+    # command: search "query" --type album
+    # To run the downloader interactively, you might remove the 'command' line
+    # and use 'docker compose run dab-downloader <command>'
+    # environment:
+    #   - API_URL=https://dab.yeet.su
+    #   - SPOTIFY_CLIENT_ID=your_spotify_client_id
+    #   - SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+    #   - NAVIDROME_URL=https://your_navidrome_url.com
+    #   - NAVIDROME_USERNAME=your_navidrome_username
+    #   - NAVIDROME_PASSWORD=your_navidrome_password
+    restart: "no"
