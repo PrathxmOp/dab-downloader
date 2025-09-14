@@ -108,7 +108,8 @@ var searchCmd = &cobra.Command{
 			case "artist":
 				artist := selectedItem.(Artist)
 				colorInfo.Println("🎵 Starting artist discography download for:", artist.Name)
-				if err := api.DownloadArtistDiscography(context.Background(), artist.ID, debug, filter, noConfirm); err != nil {
+				artistIDStr := fmt.Sprintf("%v", artist.ID) // Convert ID to string
+				if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, debug, filter, noConfirm); err != nil {
 					colorError.Printf("❌ Failed to download discography for %s: %v\n", artist.Name, err)
 				} else {
 					colorSuccess.Println("✅ Discography download completed for", artist.Name)

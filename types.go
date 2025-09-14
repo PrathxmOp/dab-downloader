@@ -53,7 +53,7 @@ type Track struct {
 }
 
 type Artist struct {
-	ID          string  `json:"id"`
+	ID          interface{} `json:"id"` // Changed to interface{} to handle both string and number
 	Name        string  `json:"name"`
 	Picture     string  `json:"picture"`
 	Albums      []Album `json:"albums,omitempty"`
