@@ -1,0 +1,116 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #121212;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+.container {
+    text-align: center;
+    background-color: #1e1e1e;
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    width: 80%;
+    max-width: 800px;
+}
+
+h1 {
+    font-size: 2.5em;
+    margin-bottom: 10px;
+}
+
+p {
+    color: #b3b3b3;
+    margin-bottom: 30px;
+}
+
+.input-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+#urlInput {
+    width: 400px;
+    padding: 12px;
+    border: 1px solid #333;
+    border-radius: 5px 0 0 5px;
+    background-color: #282828;
+    color: #fff;
+    font-size: 1em;
+}
+
+#urlInput:focus {
+    outline: none;
+    border-color: #1db954;
+}
+
+#downloadAllBtn, #searchBtn, #downloadSelectedBtn {
+    padding: 12px 20px;
+    border: none;
+    background-color: #1db954;
+    color: #fff;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.3s;
+}
+
+#downloadAllBtn {
+    border-radius: 0 5px 5px 0;
+}
+
+#searchBtn {
+    background-color: #535353;
+    margin-left: 10px;
+    border-radius: 5px;
+}
+
+#downloadAllBtn:hover, #searchBtn:hover, #downloadSelectedBtn:hover {
+    background-color: #1ed760;
+}
+
+#searchBtn:hover {
+    background-color: #636363;
+}
+
+#status {
+    margin-top: 20px;
+    color: #b3b3b3;
+}
+
+#track-list-container {
+    margin-top: 20px;
+    text-align: left;
+}
+
+.track-list {
+    list-style: none;
+    padding: 0;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.track-list li {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #333;
+}
+
+.track-list li:last-child {
+    border-bottom: none;
+}
+
+.track-list input[type="checkbox"] {
+    margin-right: 15px;
+}
+
+#downloadSelectedBtn {
+    margin-top: 20px;
+    border-radius: 5px;
+}

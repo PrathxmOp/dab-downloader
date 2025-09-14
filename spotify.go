@@ -88,3 +88,25 @@ func (s *SpotifyClient) GetAlbumTracks(albumURL string) ([]SpotifyTrack, string,
 
 	return tracks, album.Name, nil
 }
+
+// GetTrack gets a single track from a spotify track url
+func (s *SpotifyClient) GetTrack(trackURL string) (*SpotifyTrack, error) {
+	parts := strings.Split(trackURL, "/")
+	if len(parts) < 5 || parts[3] != "track" {
+		return nil, fmt.Errorf("invalid track URL")
+	}
+	trackIDStr := strings.Split(parts[4], "?")[0]
+	trackID := spotify.ID(trackIDStr)
+
+	log.Printf("Fetching track: %s", trackID)
+
+	track, err := s.client.GetTrack(context.Background(), trackID)
+	if err != nil {
+		return nil, err
+	}
+
+	trackName := track.Name
+	artistName := track.Artists[0].Name
+
+	return &SpotifyTrack{Name: trackName, Artist: artistName}, nil
+}

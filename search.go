@@ -99,3 +99,20 @@ func handleSearch(ctx context.Context, api *DabAPI, query string, searchType str
 
 	return selectedItems, itemTypes, nil
 }
+
+func searchAndGetTracks(ctx context.Context, api *DabAPI, query string, searchType string, debug bool, auto bool) ([]Track, error) {
+	colorInfo.Printf("🔎 Searching for '%s' (type: %s)...", query, searchType)
+
+	results, err := api.Search(ctx, query, searchType, 10)
+	if err != nil {
+		return nil, err
+	}
+
+	totalResults := len(results.Artists) + len(results.Albums) + len(results.Tracks)
+	if totalResults == 0 {
+		colorWarning.Println("No results found.")
+		return nil, nil
+	}
+
+	return results.Tracks, nil
+}

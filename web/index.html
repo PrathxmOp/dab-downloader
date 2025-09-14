@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAB Downloader</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>DAB Downloader</h1>
+        <p>Enter a Spotify URL to download.</p>
+        <div class="input-container">
+            <input type="text" id="urlInput" placeholder="https://open.spotify.com/track/...">
+			<button id="downloadAllBtn">Download All</button>
+            <button id="searchBtn">Search & Select</button>
+        </div>
+        <div id="status"></div>
+		<div id="track-list-container"></div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
