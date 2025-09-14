@@ -29,7 +29,9 @@ jobs:
       run: |
         echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
         echo "COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-        echo "TAG_NAME=v${{ env.DATE }}-${{ env.COMMIT }}" >> $GITHUB_ENV
+
+    - name: Set TAG_NAME
+      run: echo "TAG_NAME=v${{ env.DATE }}-${{ env.COMMIT }}" >> $GITHUB_ENV
 
     - name: Build for Linux
       run: |
