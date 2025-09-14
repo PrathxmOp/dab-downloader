@@ -19,6 +19,11 @@ jobs:
       with:
         go-version: 1.20
 
+    - name: Download Go Modules
+      run: |
+        go mod tidy
+        go mod download
+
     - name: Get current date for versioning
       id: date
       run: echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
