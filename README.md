@@ -43,7 +43,12 @@ dab-downloader/
    cd dab-downloader
    ```
 
-3. **Build the application**
+3. **Initialize Go Modules and Build**
+   First, initialize and tidy up Go modules:
+   ```bash
+   go mod tidy
+   ```
+   Then, build the application:
    ```bash
    go build -o dab-downloader
    ```
@@ -76,6 +81,32 @@ dab-downloader/
   ```
 
 ### Advanced Features
+
+#### Spotify Playlist Downloader
+
+The `dab-downloader` can download entire Spotify playlists. This feature requires Spotify API credentials (Client ID and Client Secret) which you can obtain from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/applications).
+
+**Configuration:**
+Ensure your `config.json` (or command-line flags) includes your Spotify Client ID and Client Secret:
+```json
+{
+  "SpotifyClientID": "YOUR_SPOTIFY_CLIENT_ID",
+  "SpotifyClientSecret": "YOUR_SPOTIFY_CLIENT_SECRET"
+}
+```
+
+**Usage:**
+To download a Spotify playlist, provide its URL:
+```bash
+./dab-downloader spotify <spotify_playlist_url>
+```
+The application will fetch all tracks from the playlist, search for them on the DAB API, and download them.
+
+**Automatic Download:**
+You can use the `--auto` flag to automatically download the first matching result for each track without interactive selection:
+```bash
+./dab-downloader spotify <spotify_playlist_url> --auto
+```
 
 #### Artist Discography Download
 
