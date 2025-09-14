@@ -5,7 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/PrathxmOp/dab-downloader)](https://github.com/PrathxmOp/dab-downloader/releases)
 
 > A powerful, modular music downloader that delivers high-quality FLAC files with comprehensive metadata support through the DAB API.
-
+## 
 ## ✨ Key Features
 
 🔍 **Smart Search** - Find artists, albums, and tracks with intelligent filtering  
@@ -16,6 +16,14 @@
 🔄 **Intelligent Retry Logic** - Robust error handling for reliable downloads  
 🎧 **Spotify Integration** - Import and download entire Spotify playlists  
 📊 **Navidrome Support** - Seamless integration with your music server  
+
+## 📸 Screenshots
+
+![img1](./screenshots/ScreenShot1.png)
+![img1](./screenshots/ScreenShot2.png)
+
+
+
 
 
 ## 🚀 Quick Start
@@ -118,11 +126,14 @@ Create or modify `config.json`:
 
 ```json
 {
-  "APIURL": "https://dab.yeet.su",
-  "DownloadLocation": "/home/user/Music",
+  "APIURL": "https://your-dab-api-url.com",
+  "DownloadLocation": "/path/to/your/music/folder",
   "Parallelism": 5,
-  "SpotifyClientID": "your_spotify_client_id",
-  "SpotifyClientSecret": "your_spotify_client_secret"
+  "SpotifyClientID": "YOUR_SPOTIFY_CLIENT_ID",
+  "SpotifyClientSecret": "YOUR_SPOTIFY_CLIENT_SECRET",
+  "NavidromeURL": "https://your-navidrome-url.com",
+  "NavidromeUsername": "your_navidrome_username",
+  "NavidromePassword": "your_navidrome_password"
 }
 ```
 
