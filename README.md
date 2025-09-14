@@ -3,8 +3,11 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.19-blue.svg)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-Educational-green.svg)](#license)
 [![Release](https://img.shields.io/github/v/release/PrathxmOp/dab-downloader)](https://github.com/PrathxmOp/dab-downloader/releases)
+[![Signal Support](https://img.shields.io/badge/Support-Signal%20Group-blue.svg)](https://signal.group/#CjQKIARVUX48EP6g9DSPb2n1v6fAkxGQvdJJSWc4KLa4KFVyEhDCRiJon09heXcckPnkX6k2)
 
 > A powerful, modular music downloader that delivers high-quality FLAC files with comprehensive metadata support through the DAB API.
+
+💬 **Need Help?** Join our [Signal Support Group](https://signal.group/#CjQKIARVUX48EP6g9DSPb2n1v6fAkxGQvdJJSWc4KLa4KFVyEhDCRiJon09heXcckPnkX6k2) for instant community support!
 ## 
 ## ✨ Key Features
 
@@ -22,10 +25,6 @@
 
 ![img1](./screenshots/ScreenShot1.png)
 ![img1](./screenshots/ScreenShot2.png)
-
-
-
-
 
 ## 🚀 Quick Start
 
@@ -233,6 +232,14 @@ Music/
 
 </details>
 
+## 💬 Support
+
+Need help or have questions? Join our community:
+
+📱 **[Signal Support Group](https://signal.group/#CjQKIARVUX48EP6g9DSPb2n1v6fAkxGQvdJJSWc4KLa4KFVyEhDCRiJon09heXcckPnkX6k2)** - Get real-time help and connect with other users
+
+🐛 **[GitHub Issues](https://github.com/PrathxmOp/dab-downloader/issues)** - Report bugs and request features
+
 ## 🏗️ Project Architecture
 
 ```
@@ -285,6 +292,7 @@ If you find this project helpful:
 - 🐛 Report issues and bugs
 - 💡 Suggest new features
 - 🤝 Contribute code or documentation
+- 💬 Join our [Signal community](https://signal.group/#CjQKIARVUX48EP6g9DSPb2n1v6fAkxGQvdJJSWc4KLa4KFVyEhDCRiJon09heXcckPnkX6k2)
 
 ---
 
