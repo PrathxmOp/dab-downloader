@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -29,6 +30,8 @@ var (
 	navidromeURL        string
 	navidromeUsername   string
 	navidromePassword   string
+	format              string
+	bitrate             string
 )
 
 var rootCmd = &cobra.Command{
@@ -42,6 +45,8 @@ It allows you to:
 - Download entire artist discographies.
 - Download full albums.
 - Download individual tracks (by fetching their respective album first).
+- Import and download Spotify playlists and albums.
+- Convert downloaded files to various formats (e.g., MP3, OGG, Opus) with specified bitrates.
 
 All downloads feature smart categorization, duplicate detection, and embedded cover art.`, toolVersion, authorName),
 }
@@ -51,10 +56,17 @@ var artistCmd = &cobra.Command{
 	Short: "Download an artist's entire discography.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		if format != "flac" {
+			if !CheckFFmpeg() {
+				printInstallInstructions()
+				return
+			}
+			colorSuccess.Println("âœ… ffmpeg is available. Proceeding with conversion.")
+		}
 		_, api := initConfigAndAPI()
 		artistID := args[0]
 		colorInfo.Println("🎵 Starting artist discography download for ID:", artistID)
-		if err := api.DownloadArtistDiscography(context.Background(), artistID, debug, filter, noConfirm); err != nil {
+		if err := api.DownloadArtistDiscography(context.Background(), artistID, debug, filter, noConfirm, format, bitrate); err != nil {
 			if errors.Is(err, ErrDownloadCancelled) {
 				colorWarning.Println("⚠️ Discography download cancelled by user.")
 			} else {
@@ -71,10 +83,17 @@ var albumCmd = &cobra.Command{
 	Short: "Download an album by its ID.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		if format != "flac" {
+			if !CheckFFmpeg() {
+				printInstallInstructions()
+				return
+			}
+			colorSuccess.Println("✅ ffmpeg is available. Proceeding with conversion.")
+		}
 		config, api := initConfigAndAPI()
 		albumID := args[0]
 		colorInfo.Println("🎵 Starting album download for ID:", albumID)
-		if _, err := api.DownloadAlbum(context.Background(), albumID, config.Parallelism, debug, nil); err != nil {
+		if _, err := api.DownloadAlbum(context.Background(), albumID, config.Parallelism, debug, nil, format, bitrate); err != nil {
 			colorError.Printf("❌ Failed to download album: %v\n", err)
 		} else {
 			colorSuccess.Println("✅ Album download completed!")
@@ -95,6 +114,10 @@ var searchCmd = &cobra.Command{
   # Search for tracks named "paradise" and automatically download the first result
   dab-downloader search "paradise" --type track --auto`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if format != "flac" && !CheckFFmpeg() {
+			colorError.Println("❌ ffmpeg is not installed or not in your PATH. Please install ffmpeg to use the format conversion feature.")
+			return
+		}
 		config, api := initConfigAndAPI() // Get config for parallelism
 		query := args[0]
 		selectedItems, itemTypes, err := handleSearch(context.Background(), api, query, searchType, debug, auto)
@@ -114,7 +137,7 @@ var searchCmd = &cobra.Command{
 				artist := selectedItem.(Artist)
 				colorInfo.Println("🎵 Starting artist discography download for:", artist.Name)
 				artistIDStr := fmt.Sprintf("%v", artist.ID) // Convert ID to string
-				if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, debug, filter, noConfirm); err != nil {
+				if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, debug, filter, noConfirm, format, bitrate); err != nil {
 					colorError.Printf("❌ Failed to download discography for %s: %v\n", artist.Name, err)
 				} else {
 					colorSuccess.Println("✅ Discography download completed for", artist.Name)
@@ -122,7 +145,7 @@ var searchCmd = &cobra.Command{
 			case "album":
 				album := selectedItem.(Album)
 				colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
-				if _, err := api.DownloadAlbum(context.Background(), album.ID, config.Parallelism, debug, nil); err != nil {
+				if _, err := api.DownloadAlbum(context.Background(), album.ID, config.Parallelism, debug, nil, format, bitrate); err != nil {
 					colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
 				} else {
 					colorSuccess.Println("✅ Album download completed for", album.Title)
@@ -131,7 +154,7 @@ var searchCmd = &cobra.Command{
 				track := selectedItem.(Track)
 				colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
 				// Now call the modified DownloadSingleTrack which expects a Track object
-				if err := api.DownloadSingleTrack(context.Background(), track, debug); err != nil {
+				if err := api.DownloadSingleTrack(context.Background(), track, debug, format, bitrate); err != nil {
 					colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
 				} else {
 					colorSuccess.Println("✅ Track download completed for", track.Title)
@@ -144,12 +167,16 @@ var searchCmd = &cobra.Command{
 }
 
 var spotifyCmd = &cobra.Command{
-	Use:   "spotify [playlist_url]",
-	Short: "Download a Spotify playlist.",
+	Use:   "spotify [url]",
+	Short: "Download a Spotify playlist or album.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		if format != "flac" && !CheckFFmpeg() {
+			colorError.Println("❌ ffmpeg is not installed or not in your PATH. Please install ffmpeg to use the format conversion feature.")
+			return
+		}
 		config, api := initConfigAndAPI()
-		playlistURL := args[0]
+		url := args[0]
 
 		spotifyClient := NewSpotifyClient(config.SpotifyClientID, config.SpotifyClientSecret)
 		if err := spotifyClient.Authenticate(); err != nil {
@@ -157,9 +184,20 @@ var spotifyCmd = &cobra.Command{
 			return
 		}
 
-		spotifyTracks, _, err := spotifyClient.GetPlaylistTracks(playlistURL)
+		var spotifyTracks []SpotifyTrack
+		var err error
+
+		if strings.Contains(url, "/playlist/") {
+			spotifyTracks, _, err = spotifyClient.GetPlaylistTracks(url)
+		} else if strings.Contains(url, "/album/") {
+			spotifyTracks, _, err = spotifyClient.GetAlbumTracks(url) // I need to implement this
+		} else {
+			colorError.Println("❌ Invalid Spotify URL. Please provide a playlist or album URL.")
+			return
+		}
+
 		if err != nil {
-			colorError.Printf("❌ Failed to get playlist tracks: %v\n", err)
+			colorError.Printf("❌ Failed to get tracks from Spotify: %v\n", err)
 			return
 		}
 
@@ -185,7 +223,7 @@ var spotifyCmd = &cobra.Command{
 				if itemType == "track" {
 					track := selectedItem.(Track)
 					colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
-					if err := api.DownloadSingleTrack(context.Background(), track, debug); err != nil {
+					if err := api.DownloadSingleTrack(context.Background(), track, debug, format, bitrate); err != nil {
 						colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
 					} else {
 						colorSuccess.Println("✅ Track download completed for", track.Title)
@@ -197,12 +235,12 @@ var spotifyCmd = &cobra.Command{
 }
 
 var navidromeCmd = &cobra.Command{
-	Use:   "navidrome [spotify_playlist_url]",
-	Short: "Copy a Spotify playlist to Navidrome.",
+	Use:   "navidrome [spotify_url]",
+	Short: "Copy a Spotify playlist or album to Navidrome.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		config, api := initConfigAndAPI()
-		playlistURL := args[0]
+		spotifyURL := args[0]
 
 		spotifyClient := NewSpotifyClient(config.SpotifyClientID, config.SpotifyClientSecret)
 		if err := spotifyClient.Authenticate(); err != nil {
@@ -210,11 +248,24 @@ var navidromeCmd = &cobra.Command{
 			return
 		}
 
-		spotifyTracks, spotifyPlaylistName, err := spotifyClient.GetPlaylistTracks(playlistURL) // Capture SpotifyTracks
-		if err != nil {
-			colorError.Printf("❌ Failed to get playlist tracks: %v\n", err)
+		var spotifyTracks []SpotifyTrack
+		var spotifyName string
+		var err error
+
+		if strings.Contains(spotifyURL, "/playlist/") {
+			spotifyTracks, spotifyName, err = spotifyClient.GetPlaylistTracks(spotifyURL)
+		} else if strings.Contains(spotifyURL, "/album/") {
+			spotifyTracks, spotifyName, err = spotifyClient.GetAlbumTracks(spotifyURL)
+		} else {
+			colorError.Println("❌ Invalid Spotify URL. Please provide a playlist or album URL.")
 			return
 		}
+
+		if err != nil {
+			colorError.Printf("❌ Failed to get tracks from Spotify: %v\n", err)
+			return
+		}
+
 
 		navidromeClient := NewNavidromeClient(config.NavidromeURL, config.NavidromeUsername, config.NavidromePassword)
 		if err := navidromeClient.Authenticate(); err != nil {
@@ -222,7 +273,7 @@ var navidromeCmd = &cobra.Command{
 			return
 		}
 
-		playlistName := GetUserInput("Enter a name for the new Navidrome playlist", spotifyPlaylistName) // MODIFIED
+		playlistName := GetUserInput("Enter a name for the new Navidrome playlist", spotifyName) // MODIFIED
 		if err := navidromeClient.CreatePlaylist(playlistName); err != nil {
 			colorError.Printf("❌ Failed to create Navidrome playlist: %v\n", err)
 			return
@@ -264,7 +315,7 @@ var navidromeCmd = &cobra.Command{
 					if selectedDabItemType == "track" {
 						dabTrack := selectedDabItem.(Track)
 						colorInfo.Printf("🎵 Downloading %s by %s from DAB...\n", dabTrack.Title, dabTrack.Artist)
-						if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug); err != nil {
+						if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, "flac", ""); err != nil {
 							colorError.Printf("❌ Failed to download track %s from DAB: %v\n", dabTrack.Title, err)
 						} else {
 							colorSuccess.Printf("✅ Downloaded %s by %s from DAB. It should appear in Navidrome soon.\n", dabTrack.Title, dabTrack.Artist)
@@ -380,6 +431,15 @@ var comprehensiveArtistDebugCmd = &cobra.Command{
 
 
 
+func printInstallInstructions() {
+    fmt.Println("\nðŸ“¦ Install FFmpeg:")
+    fmt.Println("â€¢ Windows: choco install ffmpeg  or  winget install ffmpeg")
+    fmt.Println("â€¢ macOS:   brew install ffmpeg")
+    fmt.Println("â€¢ Ubuntu:  sudo apt install ffmpeg")
+    fmt.Println("â€¢ Arch:    sudo pacman -S ffmpeg")
+    fmt.Println("\nðŸ”„ Restart the application after installation")
+}
+
 func initConfigAndAPI() (*Config, *DabAPI) {
 	config := &Config{
 		APIURL:           "https://dab.yeet.su",
@@ -467,14 +527,23 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&downloadLocation, "download-location", "", "Directory to save downloads")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging")
 
+	albumCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to after downloading (e.g., mp3, ogg, opus)")
+	albumCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats (in kbps, e.g., 192, 256, 320)")
+
 	artistCmd.Flags().StringVar(&filter, "filter", "all", "Filter by item type (albums, eps, singles), comma-separated")
 	artistCmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "Skip confirmation prompt")
+	artistCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to after downloading (e.g., mp3, ogg, opus)")
+	artistCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats (in kbps, e.g., 192, 256, 320)")
 
 	searchCmd.Flags().StringVar(&searchType, "type", "all", "Type of content to search for (artist, album, track, all)")
 	searchCmd.Flags().BoolVar(&auto, "auto", false, "Automatically download the first result")
+	searchCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to after downloading (e.g., mp3, ogg, opus)")
+	searchCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats (in kbps, e.g., 192, 256, 320)")
 
 	spotifyCmd.Flags().StringVar(&spotifyPlaylist, "spotify", "", "Spotify playlist URL to download")
 	spotifyCmd.Flags().BoolVar(&auto, "auto", false, "Automatically download the first result")
+	spotifyCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to after downloading (e.g., mp3, ogg, opus)")
+	spotifyCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats (in kbps, e.g., 192, 256, 320)")
 	rootCmd.PersistentFlags().StringVar(&spotifyClientID, "spotify-client-id", "", "Spotify Client ID")
 	rootCmd.PersistentFlags().StringVar(&spotifyClientSecret, "spotify-client-secret", "", "Spotify Client Secret")
 

@@ -14,7 +14,7 @@ import (
 )
 
 // DownloadArtistDiscography downloads an artist's complete discography
-func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID string, debug bool, filter string, noConfirm bool) error {
+func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID string, debug bool, filter string, noConfirm bool, format string, bitrate string) error {
 	artist, err := api.GetArtist(ctx, artistID, debug)
 	if err != nil {
 		return fmt.Errorf("failed to get artist info: %w", err)
@@ -126,9 +126,13 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 	}
 
 	// Create a pool of progress bars
-	pool, err := pb.StartPool()
-	if err != nil {
-		return fmt.Errorf("failed to start progress bar pool: %w", err)
+	var pool *pb.Pool
+	if isTTY() {
+		var err error
+		pool, err = pb.StartPool()
+		if err != nil {
+			return fmt.Errorf("failed to start progress bar pool: %w", err)
+		}
 	}
 
 	// Download each item
@@ -150,7 +154,7 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 			defer sem.Release(1)
 
 			colorInfo.Printf("🎵 Downloading %s %d/%d: %s\n", strings.ToUpper(item.Type), idx+1, len(itemsToDownload), item.Title)
-			itemStats, err := api.DownloadAlbum(ctx, item.ID, 5, debug, pool)
+			itemStats, err := api.DownloadAlbum(ctx, item.ID, 5, debug, pool, format, bitrate)
 			if err != nil {
 				errorChan <- trackError{item.Title, fmt.Errorf("item %s: %w", item.Title, err)}
 			} else {
@@ -164,7 +168,9 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 
 	// Wait for all downloads to finish
 	wg.Wait()
-	pool.Stop()
+	if pool != nil {
+		pool.Stop()
+	}
 	close(errorChan)
 
 	// Collect errors

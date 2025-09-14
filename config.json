@@ -1,0 +1,10 @@
+{
+  "APIURL": "https://dab.yeet.su",
+  "DownloadLocation": "/home/prathxm/Music",
+  "Parallelism": 5,
+  "SpotifyClientID": "07d0f18c9b884854b63115c16807ccdd",
+  "SpotifyClientSecret": "e5c76879081f4eaab4e349b7d733f434",
+  "NavidromeURL": "https://music.prathxm.in",
+  "NavidromeUsername": "Prathxm",
+  "NavidromePassword": "mishraji12"
+}

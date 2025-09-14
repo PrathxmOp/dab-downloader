@@ -14,7 +14,8 @@
 🎨 **High-Quality Artwork** - Embedded album covers in original resolution  
 ⚡ **Concurrent Downloads** - Fast parallel processing with real-time progress tracking  
 🔄 **Intelligent Retry Logic** - Robust error handling for reliable downloads  
-🎧 **Spotify Integration** - Import and download entire Spotify playlists  
+🎧 **Spotify Integration** - Import and download entire Spotify playlists and albums  
+🎵 **Format Conversion** - Convert downloaded FLAC files to MP3, OGG, Opus with configurable bitrates (requires FFmpeg)  
 📊 **Navidrome Support** - Seamless integration with your music server  
 
 ## 📸 Screenshots
@@ -55,7 +56,7 @@ go build -o dab-downloader
 # Build and run with Docker Compose
 docker compose build
 mkdir config music
-cp example-config.json config/config.json
+cp config/example-config.json config/config.json
 
 # Run any command
 docker compose run dab-downloader search "your favorite artist"
@@ -96,6 +97,9 @@ docker compose run dab-downloader search "your favorite artist"
 # Download entire Spotify playlist
 ./dab-downloader spotify <playlist_url>
 
+# Download entire Spotify album
+./dab-downloader spotify <album_url>
+
 # Auto-download (no manual selection)
 ./dab-downloader spotify <playlist_url> --auto
 ```
@@ -122,7 +126,9 @@ The application will guide you through initial configuration:
 
 ### Configuration File
 
-Create or modify `config.json`:
+The application will create `config/config.json` on first run.
+You can also create or modify it manually.
+An example configuration is available at `config/example-config.json`.
 
 ```json
 {
@@ -147,6 +153,8 @@ Override configuration with flags:
 --debug            # Enable verbose logging
 --auto             # Auto-download first results
 --no-confirm       # Skip confirmation prompts
+--format           # Specify output format (mp3, ogg, opus)
+--bitrate          # Specify bitrate for lossy formats (e.g., 192, 256, 320)
 ```
 
 ## 📁 File Organization
@@ -184,7 +192,7 @@ Music/
 
 ### Quality & Metadata
 
-- **Audio Format:** FLAC (highest quality available)
+- **Audio Format:** FLAC (highest quality available), or converted to MP3/OGG/Opus
 - **Metadata Tags:** Title, Artist, Album, Genre, Year, ISRC, Producer, Composer
 - **Cover Art:** Original resolution, auto-format detection
 - **File Naming:** Consistent, organized structure

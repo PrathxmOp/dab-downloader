@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/mattn/go-isatty"
 )
 
 // GetUserInput prompts the user for input with a default value
@@ -50,7 +52,7 @@ func SanitizeFileName(name string) string {
 // FileExists checks if a file exists at the given path
 func FileExists(path string) bool {
 	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
+	if err != nil {
 		return false
 	}
 	return !info.IsDir()
@@ -174,4 +176,8 @@ func ParseSelectionInput(input string, max int) ([]int, error) {
 	// sort.Ints(result) // Not strictly necessary for functionality, but good for consistency
 
 	return result, nil
+}
+
+func isTTY() bool {
+	return isatty.IsTerminal(os.Stdout.Fd())
 }

@@ -23,6 +23,9 @@ RUN CGO_ENABLED=0 go build -o dab-downloader -ldflags="-s -w" .
 # Stage 2: Create the final lean image
 FROM alpine:latest
 
+# Install ffmpeg for audio conversion
+RUN apk add --no-cache ffmpeg
+
 # Set working directory
 WORKDIR /app
 
@@ -30,7 +33,7 @@ WORKDIR /app
 COPY --from=builder /app/dab-downloader .
 
 # Copy example-config.json to be used as a template
-COPY example-config.json .
+COPY config/example-config.json config/
 
 # Expose a volume for persistent data (config and downloads)
 VOLUME /app/config /app/music
