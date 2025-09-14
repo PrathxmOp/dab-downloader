@@ -139,7 +139,9 @@ An example configuration is available at `config/example-config.json`.
   "SpotifyClientSecret": "YOUR_SPOTIFY_CLIENT_SECRET",
   "NavidromeURL": "https://your-navidrome-url.com",
   "NavidromeUsername": "your_navidrome_username",
-  "NavidromePassword": "your_navidrome_password"
+  "NavidromePassword": "your_navidrome_password",
+  "Format": "flac",
+  "Bitrate": "320"
 }
 ```
 
@@ -148,13 +150,20 @@ An example configuration is available at `config/example-config.json`.
 Override configuration with flags:
 
 ```bash
---api-url           # Set DAB API endpoint
---download-location # Set download directory  
---debug            # Enable verbose logging
---auto             # Auto-download first results
---no-confirm       # Skip confirmation prompts
---format           # Specify output format (mp3, ogg, opus)
---bitrate          # Specify bitrate for lossy formats (e.g., 192, 256, 320)
+--api-url               # Set DAB API endpoint
+--download-location     # Set download directory
+--debug                 # Enable verbose logging
+--auto                  # Auto-download first results
+--no-confirm            # Skip confirmation prompts
+--format                # Specify output format (mp3, ogg, opus)
+--bitrate               # Specify bitrate for lossy formats (e.g., 192, 256, 320)
+--filter                # Filter by item type for artist downloads (albums, eps, singles)
+--type                  # Type of content to search for (artist, album, track, all)
+--spotify-client-id     # Your Spotify Client ID
+--spotify-client-secret # Your Spotify Client Secret
+--navidrome-url         # Your Navidrome URL
+--navidrome-username    # Your Navidrome Username
+--navidrome-password    # Your Navidrome Password
 ```
 
 ## 📁 File Organization

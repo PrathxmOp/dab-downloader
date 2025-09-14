@@ -6,5 +6,7 @@
   "SpotifyClientSecret": "YOUR_SPOTIFY_CLIENT_SECRET",
   "NavidromeURL": "https://your-navidrome-url.com",
   "NavidromeUsername": "your_navidrome_username",
-  "NavidromePassword": "your_navidrome_password"
+  "NavidromePassword": "your_navidrome_password",
+  "Format": "flac",
+  "Bitrate": "320"
 }

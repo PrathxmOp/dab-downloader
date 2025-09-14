@@ -30,8 +30,8 @@ var (
 	navidromeURL        string
 	navidromeUsername   string
 	navidromePassword   string
-	format              string
-	bitrate             string
+	format              string = "flac"
+	bitrate             string = "320"
 )
 
 var rootCmd = &cobra.Command{
@@ -56,26 +56,23 @@ var artistCmd = &cobra.Command{
 	Short: "Download an artist's entire discography.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if format != "flac" {
-			if !CheckFFmpeg() {
+			config, api := initConfigAndAPI()
+			if config.Format != "flac" && !CheckFFmpeg() {
 				printInstallInstructions()
 				return
 			}
-			colorSuccess.Println("âœ… ffmpeg is available. Proceeding with conversion.")
-		}
-		_, api := initConfigAndAPI()
-		artistID := args[0]
-		colorInfo.Println("🎵 Starting artist discography download for ID:", artistID)
-		if err := api.DownloadArtistDiscography(context.Background(), artistID, debug, filter, noConfirm, format, bitrate); err != nil {
-			if errors.Is(err, ErrDownloadCancelled) {
-				colorWarning.Println("⚠️ Discography download cancelled by user.")
+			artistID := args[0]
+			colorInfo.Println("🎵 Starting artist discography download for ID:", artistID)
+			if err := api.DownloadArtistDiscography(context.Background(), artistID, debug, filter, noConfirm, config.Format, config.Bitrate); err != nil {
+				if errors.Is(err, ErrDownloadCancelled) {
+					colorWarning.Println("⚠️ Discography download cancelled by user.")
+				} else {
+					colorError.Printf("❌ Failed to download discography: %v\n", err)
+				}
 			} else {
-				colorError.Printf("❌ Failed to download discography: %v\n", err)
+				colorSuccess.Println("✅ Discography download completed!")
 			}
-		} else {
-			colorSuccess.Println("✅ Discography download completed!")
-		}
-	},
+		},
 }
 
 var albumCmd = &cobra.Command{
@@ -83,22 +80,19 @@ var albumCmd = &cobra.Command{
 	Short: "Download an album by its ID.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if format != "flac" {
-			if !CheckFFmpeg() {
+			config, api := initConfigAndAPI()
+			if config.Format != "flac" && !CheckFFmpeg() {
 				printInstallInstructions()
 				return
 			}
-			colorSuccess.Println("✅ ffmpeg is available. Proceeding with conversion.")
-		}
-		config, api := initConfigAndAPI()
-		albumID := args[0]
-		colorInfo.Println("🎵 Starting album download for ID:", albumID)
-		if _, err := api.DownloadAlbum(context.Background(), albumID, config.Parallelism, debug, nil, format, bitrate); err != nil {
-			colorError.Printf("❌ Failed to download album: %v\n", err)
-		} else {
-			colorSuccess.Println("✅ Album download completed!")
-		}
-	},
+			albumID := args[0]
+			colorInfo.Println("🎵 Starting album download for ID:", albumID)
+			if _, err := api.DownloadAlbum(context.Background(), albumID, config.Parallelism, debug, nil, config.Format, config.Bitrate); err != nil {
+				colorError.Printf("❌ Failed to download album: %v\n", err)
+			} else {
+				colorSuccess.Println("✅ Album download completed!")
+			}
+		},
 }
 
 var searchCmd = &cobra.Command{
@@ -114,11 +108,11 @@ var searchCmd = &cobra.Command{
   # Search for tracks named "paradise" and automatically download the first result
   dab-downloader search "paradise" --type track --auto`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if format != "flac" && !CheckFFmpeg() {
+		config, api := initConfigAndAPI() // Get config for parallelism
+		if config.Format != "flac" && !CheckFFmpeg() {
 			colorError.Println("❌ ffmpeg is not installed or not in your PATH. Please install ffmpeg to use the format conversion feature.")
 			return
 		}
-		config, api := initConfigAndAPI() // Get config for parallelism
 		query := args[0]
 		selectedItems, itemTypes, err := handleSearch(context.Background(), api, query, searchType, debug, auto)
 		if err != nil {
@@ -137,7 +131,7 @@ var searchCmd = &cobra.Command{
 				artist := selectedItem.(Artist)
 				colorInfo.Println("🎵 Starting artist discography download for:", artist.Name)
 				artistIDStr := fmt.Sprintf("%v", artist.ID) // Convert ID to string
-				if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, debug, filter, noConfirm, format, bitrate); err != nil {
+				if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, debug, filter, noConfirm, config.Format, config.Bitrate); err != nil {
 					colorError.Printf("❌ Failed to download discography for %s: %v\n", artist.Name, err)
 				} else {
 					colorSuccess.Println("✅ Discography download completed for", artist.Name)
@@ -145,7 +139,7 @@ var searchCmd = &cobra.Command{
 			case "album":
 				album := selectedItem.(Album)
 				colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
-				if _, err := api.DownloadAlbum(context.Background(), album.ID, config.Parallelism, debug, nil, format, bitrate); err != nil {
+				if _, err := api.DownloadAlbum(context.Background(), album.ID, config.Parallelism, debug, nil, config.Format, config.Bitrate); err != nil {
 					colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
 				} else {
 					colorSuccess.Println("✅ Album download completed for", album.Title)
@@ -154,7 +148,7 @@ var searchCmd = &cobra.Command{
 				track := selectedItem.(Track)
 				colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
 				// Now call the modified DownloadSingleTrack which expects a Track object
-				if err := api.DownloadSingleTrack(context.Background(), track, debug, format, bitrate); err != nil {
+				if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate); err != nil {
 					colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
 				} else {
 					colorSuccess.Println("✅ Track download completed for", track.Title)
@@ -171,11 +165,11 @@ var spotifyCmd = &cobra.Command{
 	Short: "Download a Spotify playlist or album.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if format != "flac" && !CheckFFmpeg() {
+		config, api := initConfigAndAPI()
+		if config.Format != "flac" && !CheckFFmpeg() {
 			colorError.Println("❌ ffmpeg is not installed or not in your PATH. Please install ffmpeg to use the format conversion feature.")
 			return
 		}
-		config, api := initConfigAndAPI()
 		url := args[0]
 
 		spotifyClient := NewSpotifyClient(config.SpotifyClientID, config.SpotifyClientSecret)
@@ -223,7 +217,7 @@ var spotifyCmd = &cobra.Command{
 				if itemType == "track" {
 					track := selectedItem.(Track)
 					colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
-					if err := api.DownloadSingleTrack(context.Background(), track, debug, format, bitrate); err != nil {
+					if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate); err != nil {
 						colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
 					} else {
 						colorSuccess.Println("✅ Track download completed for", track.Title)
@@ -314,8 +308,8 @@ var navidromeCmd = &cobra.Command{
 
 					if selectedDabItemType == "track" {
 						dabTrack := selectedDabItem.(Track)
-						colorInfo.Printf("🎵 Downloading %s by %s from DAB...\n", dabTrack.Title, dabTrack.Artist)
-						if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, "flac", ""); err != nil {
+			colorInfo.Printf("🎵 Downloading %s by %s from DAB...\n", dabTrack.Title, dabTrack.Artist)
+			if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, config.Format, config.Bitrate); err != nil {
 							colorError.Printf("❌ Failed to download track %s from DAB: %v\n", dabTrack.Title, err)
 						} else {
 							colorSuccess.Printf("✅ Downloaded %s by %s from DAB. It should appear in Navidrome soon.\n", dabTrack.Title, dabTrack.Artist)
@@ -480,6 +474,10 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 		config.NavidromeUsername = GetUserInput("Enter your Navidrome Username", "")
 		config.NavidromePassword = GetUserInput("Enter your Navidrome Password", "")
 
+		// Prompt for Format and Bitrate
+		config.Format = GetUserInput("Enter default output format (e.g., flac, mp3, ogg, opus)", "flac")
+		config.Bitrate = GetUserInput("Enter default bitrate for lossy formats (e.g., 320)", "320")
+
 		// Save the new config
 		if err := SaveConfig(configFile, config); err != nil {
 			colorError.Printf("❌ Failed to save initial config: %v\n", err)
@@ -492,6 +490,13 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 			colorError.Printf("❌ Failed to load config from %s: %v\n", configFile, err)
 		} else {
 			colorInfo.Println("✅ Loaded configuration from", configFile)
+			// Set defaults if not present in config file
+			if config.Format == "" {
+				config.Format = "flac"
+			}
+			if config.Bitrate == "" {
+				config.Bitrate = "320"
+			}
 		}
 	}
 
@@ -516,6 +521,14 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 	}
 	if navidromePassword != "" {
 		config.NavidromePassword = navidromePassword
+	}
+
+	// Override config with command-line flags if provided
+	if format != "flac" { // Check if format flag was explicitly set
+		config.Format = format
+	}
+	if bitrate != "320" { // Check if bitrate flag was explicitly set
+		config.Bitrate = bitrate
 	}
 
 	api := NewDabAPI(config.APIURL, config.DownloadLocation)

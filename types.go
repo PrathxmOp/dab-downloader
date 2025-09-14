@@ -23,6 +23,8 @@ type Config struct {
 	NavidromeURL        string
 	NavidromeUsername   string
 	NavidromePassword   string
+	Format              string
+	Bitrate             string
 }
 
 // API client structure

@@ -1,5 +1,3 @@
-
-
 package main
 
 import (
@@ -15,11 +13,11 @@ import (
 )
 
 // DownloadTrack downloads a single track with metadata
-func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album, outputPath string, coverData []byte, bar *pb.ProgressBar, debug bool, format string, bitrate string) error {
+func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album, outputPath string, coverData []byte, bar *pb.ProgressBar, debug bool, format string, bitrate string) (string, error) {
 	// Get stream URL
 	streamURL, err := api.GetStreamURL(ctx, idToString(track.ID))
 	if err != nil {
-		return fmt.Errorf("failed to get stream URL: %w", err)
+		return "", fmt.Errorf("failed to get stream URL: %w", err)
 	}
 
 	// Download the audio file
@@ -65,31 +63,33 @@ func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album,
 		return nil
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Add metadata to the downloaded file
 	err = AddMetadata(outputPath, track, album, coverData, len(album.Tracks))
 	if err != nil {
-		return fmt.Errorf("failed to add metadata: %w", err)
+		return "", fmt.Errorf("failed to add metadata: %w", err)
 	}
 
+	finalPath := outputPath
 	if format != "flac" {
 		colorInfo.Printf("🎵 Compressing to %s with bitrate %s kbps...\n", format, bitrate)
 		convertedFile, err := ConvertTrack(outputPath, format, bitrate)
 		if err != nil {
-			return fmt.Errorf("failed to convert track: %w", err)
+			return "", fmt.Errorf("failed to convert track: %w", err)
 		}
 		// Conversion successful, remove original FLAC file
 		if err := os.Remove(outputPath); err != nil {
-			colorWarning.Printf("âš ï¸ Failed to remove original FLAC file: %v\n", err)
+			colorWarning.Printf("⚠️ Failed to remove original FLAC file: %v\n", err)
 		}
+		finalPath = convertedFile
 		if debug {
-			colorInfo.Printf("âœ… Successfully converted to %s: %s\n", format, convertedFile)
+			colorInfo.Printf("✅ Successfully converted to %s: %s\n", format, convertedFile)
 		}
 	}
 
-	return nil
+	return finalPath, nil
 }
 
 // DownloadSingleTrack downloads a single track.
@@ -155,7 +155,8 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 	}
 
 	// Download the track
-	if err := api.DownloadTrack(ctx, *albumTrack, album, trackPath, coverData, bar, debug, format, bitrate); err != nil {
+	finalPath, err := api.DownloadTrack(ctx, *albumTrack, album, trackPath, coverData, bar, debug, format, bitrate)
+	if err != nil {
 		if bar != nil {
 			bar.Finish()
 		}
@@ -165,7 +166,7 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 		bar.Finish()
 	}
 
-	colorSuccess.Printf("✅ Successfully downloaded: %s\n", trackPath)
+	colorSuccess.Printf("✅ Successfully downloaded: %s\n", finalPath)
 	return nil
 }
 
@@ -246,7 +247,7 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, parallelis
 				}
 			}
 
-			if err := api.DownloadTrack(ctx, track, album, trackPath, coverData, bar, debug, format, bitrate); err != nil {
+			if _, err := api.DownloadTrack(ctx, track, album, trackPath, coverData, bar, debug, format, bitrate); err != nil {
 				errorChan <- trackError{track.Title, fmt.Errorf("track %s: %w", track.Title, err)}
 				return
 			}
