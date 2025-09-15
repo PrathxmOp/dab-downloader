@@ -425,9 +425,16 @@ var comprehensiveArtistDebugCmd = &cobra.Command{
 	},
 }
 
-
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version number of dab-downloader",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("dab-downloader %s\n", toolVersion)
+	},
+}
 
 func printInstallInstructions() {
+
     fmt.Println("\nðŸ“¦ Install FFmpeg:")
     fmt.Println("â€¢ Windows: choco install ffmpeg  or  winget install ffmpeg")
     fmt.Println("â€¢ macOS:   brew install ffmpeg")
@@ -584,6 +591,8 @@ func init() {
 	debugCmd.AddCommand(testApiAvailabilityCmd)
 	debugCmd.AddCommand(testArtistEndpointsCmd)
 	debugCmd.AddCommand(comprehensiveArtistDebugCmd)
+
+	rootCmd.AddCommand(versionCmd)
 }
 
 func main() {

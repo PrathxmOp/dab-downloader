@@ -36,11 +36,11 @@ func CheckForUpdates(currentVersion string) {
 	latestVersion := release.TagName
 
 	if isNewerVersion(latestVersion, currentVersion) {
-		fmt.Printf("A new version (%s) of dab-downloader is available! You are running %s.\n", latestVersion, currentVersion)
-		fmt.Println("Please update to get the latest features and bug fixes.")
-	} else {
-		fmt.Println("You are running the latest version of dab-downloader.")
-	}
+			colorWarning.Printf("A new version (%s) of dab-downloader is available! You are running %s.\n", latestVersion, currentVersion)
+			colorWarning.Println("Please update to get the latest features and bug fixes.")
+		} else {
+			colorSuccess.Println("You are running the latest version of dab-downloader.")
+		}
 }
 
 // isNewerVersion compares two versions in vYYYYMMDD-commit_hash format
