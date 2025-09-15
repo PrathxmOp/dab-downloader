@@ -348,12 +348,15 @@ func (api *DabAPI) Search(ctx context.Context, query string, searchType string, 
 						errChan <- err
 						return
 					}
+					uniqueArtists := make(map[string]Artist)
 					for _, track := range tempTracks {
-						// Create a new Artist struct and populate it from the track data
 						artist := Artist{
 							ID:   track.ArtistId,
 							Name: track.Artist,
 						}
+						uniqueArtists[fmt.Sprintf("%v", artist.ID)] = artist // Use artist ID as key for uniqueness
+					}
+					for _, artist := range uniqueArtists {
 						results.Artists = append(results.Artists, artist)
 					}
 				} else if res, ok := data["results"]; ok {
