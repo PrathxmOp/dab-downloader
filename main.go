@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cheggaaa/pb/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -67,9 +68,11 @@ var artistCmd = &cobra.Command{
 			if err := api.DownloadArtistDiscography(context.Background(), artistID, config, debug, filter, noConfirm); err != nil {
 				if errors.Is(err, ErrDownloadCancelled) {
 					colorWarning.Println("⚠️ Discography download cancelled by user.")
-				} else {
-					colorError.Printf("❌ Failed to download discography: %v\n", err)
-				}
+				} else if errors.Is(err, ErrNoItemsSelected) {
+                    colorWarning.Println("⚠️ No items were selected for download.")
+                } else {
+                    colorError.Printf("❌ Failed to download discography: %v\n", err)
+                }
 			} else {
 				colorSuccess.Println("✅ Discography download completed!")
 			}
@@ -118,13 +121,28 @@ var searchCmd = &cobra.Command{
 			}
 
 
+			// Initialize pool for multiple track downloads
+			var pool *pb.Pool
+			var localPool bool
+			if isTTY() && len(selectedItems) > 1 { // Only create pool if multiple items and TTY
+				pool, err = pb.StartPool()
+				if err != nil {
+					colorError.Printf("❌ Failed to start progress bar pool: %v\n", err)
+					return // Exit if pool cannot be started
+				}
+				localPool = true
+			}
+
 			for i, selectedItem := range selectedItems {
 				itemType := itemTypes[i]
 				switch itemType {
 				case "artist":
 					artist := selectedItem.(Artist)
 					colorInfo.Println("🎵 Starting artist discography download for:", artist.Name)
-					artistIDStr := fmt.Sprintf("%v", artist.ID) // Convert ID to string
+					artistIDStr := idToString(artist.ID) // Convert ID to string using idToString
+					if debug { // Add this debug print
+						colorInfo.Printf("DEBUG - Passing artistIDStr to DownloadArtistDiscography: '%s'\n", artistIDStr)
+					}
 					if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, config, debug, filter, noConfirm); err != nil {
 						colorError.Printf("❌ Failed to download discography for %s: %v\n", artist.Name, err)
 					} else {
@@ -141,8 +159,8 @@ var searchCmd = &cobra.Command{
 				case "track":
 					track := selectedItem.(Track)
 					colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
-					// Now call the modified DownloadSingleTrack which expects a Track object
-					if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate); err != nil {
+					// Now call the modified DownloadSingleTrack which expects a Track object and potentially a pool
+					if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate, pool); err != nil {
 						colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
 					} else {
 						colorSuccess.Println("✅ Track download completed for", track.Title)
@@ -150,6 +168,10 @@ var searchCmd = &cobra.Command{
 				default:
 					colorError.Println("❌ Unknown item type selected.")
 				}
+			}
+
+			if localPool && pool != nil {
+				pool.Stop()
 			}
 		},
 }
@@ -194,11 +216,27 @@ var spotifyCmd = &cobra.Command{
 				tracks = append(tracks, spotifyTrack.Name+" - "+spotifyTrack.Artist)
 			}
 
-			for _, trackName := range tracks {
+			// Initialize pool for multiple track downloads
+			var pool *pb.Pool
+			var localPool bool
+			if isTTY() && len(spotifyTracks) > 1 { // Only create pool if multiple items and TTY
+				pool, err = pb.StartPool()
+				if err != nil {
+					colorError.Printf("❌ Failed to start progress bar pool: %v\n", err)
+					return // Exit if pool cannot be started
+				}
+				localPool = true
+			}
+
+			for _, spotifyTrack := range spotifyTracks {
+				trackName := spotifyTrack.Name + " - " + spotifyTrack.Artist // Construct search query
 				selectedItems, itemTypes, err := handleSearch(context.Background(), api, trackName, "track", debug, auto)
 				if err != nil {
 					colorError.Printf("❌ Search failed for track %s: %v\n", trackName, err)
-					continue
+					if pool != nil {
+						pool.Stop() // Stop pool on error
+					}
+					return // Exit on search error
 				}
 
 				if len(selectedItems) == 0 {
@@ -211,13 +249,17 @@ var spotifyCmd = &cobra.Command{
 					if itemType == "track" {
 						track := selectedItem.(Track)
 						colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
-						if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate); err != nil {
+						if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate, pool); err != nil {
 							colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
 						} else {
 							colorSuccess.Println("✅ Track download completed for", track.Title)
 						}
 					}
 				}
+			}
+
+			if localPool && pool != nil {
+				pool.Stop()
 			}
 		},
 }
@@ -311,7 +353,7 @@ var navidromeCmd = &cobra.Command{
 					if selectedDabItemType == "track" {
 						dabTrack := selectedDabItem.(Track)
 					colorInfo.Printf("🎵 Downloading %s by %s from DAB...\n", dabTrack.Title, dabTrack.Artist)
-						if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, config.Format, config.Bitrate); err != nil {
+						if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, config.Format, config.Bitrate, nil); err != nil {
 							colorError.Printf("❌ Failed to download track %s from DAB: %v\n", dabTrack.Title, err)
 						} else {
 							colorSuccess.Printf("✅ Downloaded %s by %s from DAB. It should appear in Navidrome soon.\n", dabTrack.Title, dabTrack.Artist)
@@ -512,6 +554,7 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 			if config.Bitrate == "" {
 				config.Bitrate = "320"
 			}
+			
 		}
 	}
 

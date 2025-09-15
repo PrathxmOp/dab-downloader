@@ -15,7 +15,7 @@ import (
 
 // DownloadArtistDiscography downloads an artist's complete discography
 func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID string, config *Config, debug bool, filter string, noConfirm bool) error {
-	artist, err := api.GetArtist(ctx, artistID, debug)
+	artist, err := api.GetArtist(ctx, artistID, config, debug)
 	if err != nil {
 		return fmt.Errorf("failed to get artist info: %w", err)
 	}
@@ -102,7 +102,7 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 
 	if len(itemsToDownload) == 0 {
 		colorWarning.Println("⚠️ No items selected for download.")
-		return nil
+		return ErrNoItemsSelected
 	}
 
 	colorInfo.Printf("\n📋 Items to download (%d):\n", len(itemsToDownload))
@@ -112,8 +112,8 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 
 	// Confirm download
 	if !noConfirm {
-		confirm := GetUserInput("Proceed with download? (y/N)", "n")
-		if strings.ToLower(confirm) != "y" {
+		confirm := GetYesNoInput("Proceed with download? (y/N)", "n")
+		if !confirm {
 			colorWarning.Println("⚠️ Download cancelled.")
 			return nil
 		}
@@ -128,10 +128,21 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 	// Create a pool of progress bars
 	var pool *pb.Pool
 	if isTTY() {
+		if debug {
+			colorInfo.Println("DEBUG: isTTY() is true. Attempting to start progress bar pool.")
+		}
 		var err error
 		pool, err = pb.StartPool()
 		if err != nil {
+			colorError.Printf("❌ Failed to start progress bar pool: %v\n", err)
 			return fmt.Errorf("failed to start progress bar pool: %w", err)
+		}
+		if debug {
+			colorInfo.Println("DEBUG: Progress bar pool started successfully.")
+		}
+	} else {
+		if debug {
+			colorInfo.Println("DEBUG: isTTY() is false. Progress bars will not be displayed.")
 		}
 	}
 

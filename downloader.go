@@ -33,7 +33,6 @@ func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album,
 			if debug {
 				fmt.Println("DEBUG: Starting progress bar for", track.Title)
 			}
-			bar.SetWriter(os.Stdout) // Ensure output to stdout
 			if audioResp.ContentLength <= 0 {
 				bar.Set("indeterminate", true) // Force spinner for unknown size
 			} else {
@@ -94,7 +93,7 @@ func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album,
 
 // DownloadSingleTrack downloads a single track.
 // It now accepts a full Track object, assuming it comes from search results.
-func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug bool, format string, bitrate string) error {
+func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug bool, format string, bitrate string, pool *pb.Pool) error {
 	colorInfo.Printf("🎶 Preparing to download track: %s by %s (Album ID: %s)...\n", track.Title, track.Artist, track.AlbumID)
 
 	// Fetch the album information using the track's AlbumID
@@ -143,9 +142,17 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 
 	// Create progress bar
 	var bar *pb.ProgressBar
-	if isTTY() {
+	if pool != nil { // Use pool if provided
 		bar = pb.New(0)
-		bar.SetWriter(os.Stdout) // Ensure output to stdout
+		bar.SetTemplateString(`{{ string . "prefix" }} {{ bar . }} {{ percent . }} | {{ speed . "%s/s" }} | ETA {{ rtime . "%s" }}`)
+		bar.Set("prefix", fmt.Sprintf("Downloading %-40s: ", TruncateString(albumTrack.Title, 40)))
+		if debug {
+			fmt.Println("DEBUG: Creating single track progress bar for", albumTrack.Title)
+		}
+		pool.Add(bar) // Add to pool
+	} else if isTTY() { // Fallback to single bar if no pool and is TTY
+		bar = pb.New(0)
+		bar.SetWriter(os.Stdout)
 		bar.SetTemplateString(`{{ string . "prefix" }} {{ bar . }} {{ percent . }} | {{ speed . "%s/s" }} | ETA {{ rtime . "%s" }}`)
 		bar.Set("prefix", fmt.Sprintf("Downloading %-40s: ", TruncateString(albumTrack.Title, 40)))
 		if debug {
@@ -157,12 +164,12 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 	// Download the track
 	finalPath, err := api.DownloadTrack(ctx, *albumTrack, album, trackPath, coverData, bar, debug, format, bitrate)
 	if err != nil {
-		if bar != nil {
+		if bar != nil && pool == nil { // Only finish if it's a standalone bar
 			bar.Finish()
 		}
 		return err
 	}
-	if bar != nil {
+	if bar != nil && pool == nil { // Only finish if it's a standalone bar
 		bar.Finish()
 	}
 

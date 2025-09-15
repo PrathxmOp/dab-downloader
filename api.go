@@ -10,7 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time" // Add time import
+
+	"golang.org/x/sync/semaphore"
 )
+
+const requestInterval = 500 * time.Millisecond // Define rate limit interval
 
 // NewDabAPI creates a new API client
 func NewDabAPI(endpoint, outputLocation string) *DabAPI {
@@ -20,11 +25,24 @@ func NewDabAPI(endpoint, outputLocation string) *DabAPI {
 		client: &http.Client{
 			Timeout: requestTimeout,
 		},
+		rateLimiter:    time.NewTicker(requestInterval), // Initialize rate limiter
 	}
+}
+
+type DabAPI struct {
+	endpoint       string
+	outputLocation string
+	client         *http.Client
+	mu             sync.Mutex // Mutex to protect rate limiter
+	rateLimiter    *time.Ticker // Rate limiter for API requests
 }
 
 // Request makes HTTP requests to the API
 func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, params []QueryParam) (*http.Response, error) {
+	api.mu.Lock()
+	<-api.rateLimiter.C // Wait for the rate limiter
+	api.mu.Unlock()
+
 	var fullURL string
 
 	if isPathOnly {
@@ -46,20 +64,32 @@ func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, pa
 		u.RawQuery = q.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
-	}
-	req.Header.Set("User-Agent", userAgent)
+	var resp *http.Response
+	err = RetryWithBackoff(maxRetries, 1, func() error {
+		req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+		if err != nil {
+			return fmt.Errorf("error creating request: %w", err)
+		}
+		req.Header.Set("User-Agent", userAgent)
 
-	resp, err := api.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error executing request: %w", err)
-	}
+		resp, err = api.client.Do(req)
+		if err != nil {
+			return fmt.Errorf("error executing request: %w", err)
+		}
 
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("request failed with status: %s", resp.Status)
+		if resp.StatusCode == http.StatusTooManyRequests {
+			resp.Body.Close()
+			return fmt.Errorf("rate limit exceeded (429), retrying") // Return error to trigger retry
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return fmt.Errorf("request failed with status: %s", resp.Status)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	return resp, nil
@@ -130,7 +160,7 @@ func (api *DabAPI) GetAlbum(ctx context.Context, albumID string) (*Album, error)
 }
 
 // GetArtist retrieves artist information and discography
-func (api *DabAPI) GetArtist(ctx context.Context, artistID string, debug bool) (*Artist, error) {
+func (api *DabAPI) GetArtist(ctx context.Context, artistID string, config *Config, debug bool) (*Artist, error) {
 	if debug {
 		fmt.Printf("DEBUG - GetArtist called with artistID: '%s'\n", artistID)
 	}
@@ -177,7 +207,10 @@ func (api *DabAPI) GetArtist(ctx context.Context, artistID string, debug bool) (
 	artist := discographyResp.Artist
 	artist.Albums = discographyResp.Albums
 
-	if artist.Name == "" && len(artist.Albums) > 0 {
+	// Prioritize artist name from albums if the API returns "Unknown Artist"
+	if artist.Name == "Unknown Artist" && len(artist.Albums) > 0 {
+		artist.Name = artist.Albums[0].Artist
+	} else if artist.Name == "" && len(artist.Albums) > 0 { // Keep existing logic for truly empty name
 		artist.Name = artist.Albums[0].Artist
 	}
 
@@ -186,32 +219,69 @@ func (api *DabAPI) GetArtist(ctx context.Context, artistID string, debug bool) (
 	}
 
 	// Process albums to ensure proper categorization
+	colorInfo.Println("🔍 Fetching detailed album information...")
+
+	var wg sync.WaitGroup
+	sem := semaphore.NewWeighted(int64(config.Parallelism)) // Use configured parallelism for fetching
+
 	for i := range artist.Albums {
-		album := &artist.Albums[i]
+		wg.Add(1)
+		album := &artist.Albums[i] // Capture album for goroutine
 
-		// Auto-detect type if not provided
-		if album.Type == "" {
-			trackCount := len(album.Tracks)
-			if trackCount == 0 {
-				// If we don't have track info, we'll need to fetch it later
-				album.Type = "album" // Default assumption
-			} else if trackCount == 1 {
-				album.Type = "single"
-			} else if trackCount <= 6 {
-				album.Type = "ep"
-			} else {
-				album.Type = "album"
+		go func(album *Album) {
+			defer wg.Done()
+			if err := sem.Acquire(ctx, 1); err != nil {
+				colorError.Printf("Failed to acquire semaphore for album %s: %v\n", album.Title, err)
+				return
 			}
-		}
+			defer sem.Release(1)
 
-		// Normalize type to lowercase for consistency
-		album.Type = strings.ToLower(album.Type)
+			// If album type is not provided by the discography endpoint, fetch full album details
+			if album.Type == "" || len(album.Tracks) == 0 {
+				colorInfo.Printf("  Fetching details for album: %s (ID: %s)\n", album.Title, album.ID)
+				if debug {
+					fmt.Printf("DEBUG - Fetching full album details for album ID: %s, Title: %s\n", album.ID, album.Title)
+				}
+				fullAlbum, err := api.GetAlbum(ctx, album.ID)
+				if err != nil {
+					if debug {
+						fmt.Printf("DEBUG - Failed to fetch full album details for %s: %v\n", album.Title, err)
+					}
+					// Continue with heuristic if fetching full album fails
+				} else {
+					// Update album with full details
+					album.Type = fullAlbum.Type
+					album.Tracks = fullAlbum.Tracks
+					album.TotalTracks = fullAlbum.TotalTracks
+					album.TotalDiscs = fullAlbum.TotalDiscs
+					album.Year = fullAlbum.Year
+				}
+			}
 
-		// Set year if missing
-		if album.Year == "" && len(album.ReleaseDate) >= 4 {
-			album.Year = album.ReleaseDate[:4]
-		}
+			// Auto-detect type if still not provided or tracks were empty
+			if album.Type == "" {
+				trackCount := len(album.Tracks)
+				if trackCount == 0 {
+					album.Type = "album" // Default assumption if no track info
+				} else if trackCount == 1 {
+					album.Type = "single"
+				} else if trackCount <= 6 {
+					album.Type = "ep"
+				} else {
+					album.Type = "album"
+				}
+			}
+
+			// Normalize type to lowercase for consistency
+			album.Type = strings.ToLower(album.Type)
+
+			// Set year if missing
+			if album.Year == "" && len(album.ReleaseDate) >= 4 {
+				album.Year = album.ReleaseDate[:4]
+			}
+		}(album)
 	}
+	wg.Wait()
 
 	return &artist, nil
 }

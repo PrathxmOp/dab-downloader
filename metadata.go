@@ -6,7 +6,10 @@ import (
 	"github.com/go-flac/go-flac"
 	"github.com/go-flac/flacpicture"
 	"github.com/go-flac/flacvorbis"
+	
 )
+
+var mbClient = NewMusicBrainzClient() // Global instance of MusicBrainzClient
 
 // AddMetadata adds comprehensive metadata to a FLAC file
 func AddMetadata(filePath string, track Track, album *Album, coverData []byte, totalTracks int) error {
@@ -118,6 +121,41 @@ func AddMetadata(filePath string, track Track, album *Album, coverData []byte, t
 	addField(comment, "MUSICBRAINZ_TRACKID", idToString(track.ID))
 	if album != nil && album.ID != "" {
 		addField(comment, "MUSICBRAINZ_ALBUMID", album.ID)
+	}
+
+	// Fetch and add MusicBrainz metadata if available
+	if track.MusicBrainzID != "" {
+		mbTrack, err := mbClient.GetTrackMetadata(track.MusicBrainzID)
+		if err != nil {
+			colorWarning.Printf("Warning: Failed to fetch MusicBrainz track metadata for ID %s: %v\n", track.MusicBrainzID, err)
+		} else {
+			// Add more detailed MusicBrainz tags from the fetched data
+			addField(comment, "MUSICBRAINZ_RECORDINGID", mbTrack.ID)
+			if len(mbTrack.ArtistCredit) > 0 {
+				addField(comment, "MUSICBRAINZ_ARTISTID", mbTrack.ArtistCredit[0].Artist.ID)
+			}
+			// Add other relevant fields from mbTrack as needed
+		}
+	}
+
+	if album != nil && album.MusicBrainzID != "" {
+		mbRelease, err := mbClient.GetReleaseMetadata(album.MusicBrainzID)
+		if err != nil {
+			colorWarning.Printf("Warning: Failed to fetch MusicBrainz release metadata for ID %s: %v\n", album.MusicBrainzID, err)
+		} else {
+			addField(comment, "MUSICBRAINZ_RELEASEID", mbRelease.ID)
+			if len(mbRelease.ArtistCredit) > 0 {
+				addField(comment, "MUSICBRAINZ_ALBUMARTISTID", mbRelease.ArtistCredit[0].Artist.ID)
+			}
+			if mbRelease.Barcode != "" {
+				addField(comment, "BARCODE", mbRelease.Barcode)
+			}
+			if len(mbRelease.LabelInfo) > 0 && mbRelease.LabelInfo[0].CatalogNumber != "" {
+				addField(comment, "CATALOGNUMBER", mbRelease.LabelInfo[0].CatalogNumber)
+				addField(comment, "LABEL", mbRelease.LabelInfo[0].Label.Name)
+			}
+			// Add other relevant fields from mbRelease as needed
+		}
 	}
 
 	addField(comment, "ENCODER", "EnhancedFLACDownloader/2.0")

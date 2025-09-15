@@ -129,6 +129,21 @@ func idToString(id interface{}) string {
 	}
 }
 
+// GetYesNoInput prompts the user for a yes/no input with a default value
+func GetYesNoInput(prompt string, defaultValue string) bool {
+	for {
+		input := GetUserInput(prompt, defaultValue)
+		switch strings.ToLower(input) {
+		case "y", "yes":
+			return true
+		case "n", "no":
+			return false
+		default:
+			colorError.Printf("❌ Invalid input. Please enter 'y' or 'n'.\n")
+		}
+	}
+}
+
 // ParseSelectionInput parses a string like "1-7, 10, 12-15" into a slice of unique integers.
 func ParseSelectionInput(input string, max int) ([]int, error) {
 	selected := make(map[int]bool)
@@ -147,12 +162,12 @@ func ParseSelectionInput(input string, max int) ([]int, error) {
 			if len(rangeParts) != 2 {
 				return nil, fmt.Errorf("invalid range format: %s", part)
 			}
-			start, err := strconv.Atoi(strings.TrimSpace(rangeParts[0]))
-			if err != nil {
+			start, err1 := strconv.Atoi(strings.TrimSpace(rangeParts[0]))
+			if err1 != nil {
 				return nil, fmt.Errorf("invalid start of range: %s", rangeParts[0])
 			}
-			end, err := strconv.Atoi(strings.TrimSpace(rangeParts[1]))
-			if err != nil {
+			end, err2 := strconv.Atoi(strings.TrimSpace(rangeParts[1]))
+			if err2 != nil {
 				return nil, fmt.Errorf("invalid end of range: %s", rangeParts[1])
 			}
 

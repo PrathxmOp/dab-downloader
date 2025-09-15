@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"net/http"
+	
 	"time"
 )
 
@@ -28,12 +28,7 @@ type Config struct {
 	SaveAlbumArt        bool   `json:"saveAlbumArt"`
 }
 
-// API client structure
-type DabAPI struct {
-	endpoint       string
-	outputLocation string
-	client         *http.Client
-}
+
 
 // Music data structures
 type Track struct {
@@ -55,6 +50,7 @@ type Track struct {
 	ISRC        string `json:"isrc,omitempty"`
 	Copyright   string `json:"copyright,omitempty"`
 	AlbumID     string `json:"albumId"` // Added AlbumID field
+	MusicBrainzID string `json:"musicbrainzId,omitempty"` // MusicBrainz ID for the track
 }
 
 type Artist struct {
@@ -83,6 +79,7 @@ type Album struct {
 	Year        string      `json:"year,omitempty"`
 	TotalTracks int         `json:"totalTracks,omitempty"`
 	TotalDiscs  int         `json:"totalDiscs,omitempty"`
+	MusicBrainzID string `json:"musicbrainzId,omitempty"` // MusicBrainz ID for the album
 }
 
 // API response structures
@@ -142,3 +139,6 @@ type trackError struct {
 
 // ErrDownloadCancelled is returned when the user explicitly cancels a download operation.
 var ErrDownloadCancelled = fmt.Errorf("download cancelled by user")
+
+// ErrNoItemsSelected is returned when no items are selected for download.
+var ErrNoItemsSelected = fmt.Errorf("no items selected for download")
