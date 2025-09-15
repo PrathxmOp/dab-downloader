@@ -435,9 +435,15 @@ func printInstallInstructions() {
 }
 
 func initConfigAndAPI() (*Config, *DabAPI) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		colorWarning.Println("⚠️ Could not determine home directory, will use current directory for downloads.")
+		homeDir = "." // or some other sensible default
+	}
+
 	config := &Config{
 		APIURL:           "https://dab.yeet.su",
-		DownloadLocation: filepath.Join(os.Getenv("HOME"), "Music"),
+		DownloadLocation: filepath.Join(homeDir, "Music"),
 		Parallelism:      5,
 	}
 
