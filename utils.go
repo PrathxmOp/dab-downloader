@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -32,7 +33,7 @@ func GetUserInput(prompt, defaultValue string) string {
 // SanitizeFileName cleans a string to make it safe for use as a file name
 func SanitizeFileName(name string) string {
 	// Replace invalid characters with underscores
-	invalidChars := []string{"<", ">", ":", `"`, "/", `\`, "|", "?", "*", "\x00"}
+	invalidChars := []string{"<", ">", ":", `"`, `/`, `\\`, `|`, `?`, `*`, "\x00"}
 	result := name
 	for _, char := range invalidChars {
 		result = strings.ReplaceAll(result, char, "_")
@@ -186,4 +187,10 @@ func ParseSelectionInput(input string, max int) ([]int, error) {
 
 func isTTY() bool {
 	return isatty.IsTerminal(os.Stdout.Fd())
+}
+
+// removeSuffix removes a suffix from a track title
+func removeSuffix(trackTitle string, suffix string) string {
+	re := regexp.MustCompile(fmt.Sprintf(`(?i)( - |\s*\()((\d{4} )?)?(%s(ed)?( Version)?|Digital (Master?|%s(ed)?)|Remix)( \d{4})?(\))?$`, suffix, suffix))
+	return re.ReplaceAllString(trackTitle, "")
 }

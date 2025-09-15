@@ -32,23 +32,14 @@ var (
 	navidromePassword   string
 	format              string = "flac"
 	bitrate             string = "320"
+	ignoreSuffix      string
 )
 
 var rootCmd = &cobra.Command{
 	Use:     "dab-downloader",
 	Version: toolVersion, // Set the version here
 	Short:   "A high-quality FLAC music downloader for the DAB API.",
-	Long: fmt.Sprintf(`DAB Downloader (v%s) by %s
-
-A modular, high-quality FLAC music downloader with comprehensive metadata support for the DAB API.
-It allows you to:
-- Download entire artist discographies.
-- Download full albums.
-- Download individual tracks (by fetching their respective album first).
-- Import and download Spotify playlists and albums.
-- Convert downloaded files to various formats (e.g., MP3, OGG, Opus) with specified bitrates.
-
-All downloads feature smart categorization, duplicate detection, and embedded cover art.`, toolVersion, authorName),
+	Long: fmt.Sprintf(`DAB Downloader (v%s) by %s\n\nA modular, high-quality FLAC music downloader with comprehensive metadata support for the DAB API.\nIt allows you to:\n- Download entire artist discographies.\n- Download full albums.\n- Download individual tracks (by fetching their respective album first).\n- Import and download Spotify playlists and albums.\n- Convert downloaded files to various formats (e.g., MP3, OGG, Opus) with specified bitrates.\n\nAll downloads feature smart categorization, duplicate detection, and embedded cover art.`, toolVersion, authorName),
 }
 
 var artistCmd = &cobra.Command{
@@ -99,65 +90,58 @@ var searchCmd = &cobra.Command{
 	Use:   "search [query]",
 	Short: "Search for artists, albums, or tracks.",
 	Args:  cobra.ExactArgs(1),
-	Example: `  # Search for albums containing "parat 3"
-  dab-downloader search "parat 3" --type album
-
-  # Search for artists named "coldplay"
-  dab-downloader search "coldplay" --type artist
-
-  # Search for tracks named "paradise" and automatically download the first result
-  dab-downloader search "paradise" --type track --auto`,
+	Example: `  # Search for albums containing \"parat 3\"\n  dab-downloader search \"parat 3\" --type album\n\n  # Search for artists named \"coldplay\"\n  dab-downloader search \"coldplay\" --type artist\n\n  # Search for tracks named \"paradise\" and automatically download the first result\n  dab-downloader search \"paradise\" --type track --auto`,
 	Run: func(cmd *cobra.Command, args []string) {
 		config, api := initConfigAndAPI() // Get config for parallelism
-		if config.Format != "flac" && !CheckFFmpeg() {
-			colorError.Println("❌ ffmpeg is not installed or not in your PATH. Please install ffmpeg to use the format conversion feature.")
-			return
-		}
-		query := args[0]
-		selectedItems, itemTypes, err := handleSearch(context.Background(), api, query, searchType, debug, auto)
-		if err != nil {
-			colorError.Printf("❌ Search failed: %v\n", err)
-			return
-		}
-		if len(selectedItems) == 0 { // User quit or no results
-			return
-		}
-
-
-		for i, selectedItem := range selectedItems {
-			itemType := itemTypes[i]
-			switch itemType {
-			case "artist":
-				artist := selectedItem.(Artist)
-				colorInfo.Println("🎵 Starting artist discography download for:", artist.Name)
-				artistIDStr := fmt.Sprintf("%v", artist.ID) // Convert ID to string
-				if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, debug, filter, noConfirm, config.Format, config.Bitrate); err != nil {
-					colorError.Printf("❌ Failed to download discography for %s: %v\n", artist.Name, err)
-				} else {
-					colorSuccess.Println("✅ Discography download completed for", artist.Name)
-				}
-			case "album":
-				album := selectedItem.(Album)
-				colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
-				if _, err := api.DownloadAlbum(context.Background(), album.ID, config.Parallelism, debug, nil, config.Format, config.Bitrate); err != nil {
-					colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
-				} else {
-					colorSuccess.Println("✅ Album download completed for", album.Title)
-				}
-			case "track":
-				track := selectedItem.(Track)
-				colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
-				// Now call the modified DownloadSingleTrack which expects a Track object
-				if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate); err != nil {
-					colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
-				} else {
-					colorSuccess.Println("✅ Track download completed for", track.Title)
-				}
-			default:
-				colorError.Println("❌ Unknown item type selected.")
+			if config.Format != "flac" && !CheckFFmpeg() {
+				colorError.Println("❌ ffmpeg is not installed or not in your PATH. Please install ffmpeg to use the format conversion feature.")
+				return
 			}
-		}
-	},
+			query := args[0]
+			selectedItems, itemTypes, err := handleSearch(context.Background(), api, query, searchType, debug, auto)
+			if err != nil {
+				colorError.Printf("❌ Search failed: %v\n", err)
+				return
+			}
+			if len(selectedItems) == 0 { // User quit or no results
+				return
+			}
+
+
+			for i, selectedItem := range selectedItems {
+				itemType := itemTypes[i]
+				switch itemType {
+				case "artist":
+					artist := selectedItem.(Artist)
+					colorInfo.Println("🎵 Starting artist discography download for:", artist.Name)
+					artistIDStr := fmt.Sprintf("%v", artist.ID) // Convert ID to string
+					if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, debug, filter, noConfirm, config.Format, config.Bitrate); err != nil {
+						colorError.Printf("❌ Failed to download discography for %s: %v\n", artist.Name, err)
+					} else {
+						colorSuccess.Println("✅ Discography download completed for", artist.Name)
+					}
+				case "album":
+					album := selectedItem.(Album)
+					colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
+					if _, err := api.DownloadAlbum(context.Background(), album.ID, config.Parallelism, debug, nil, config.Format, config.Bitrate); err != nil {
+						colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
+					} else {
+						colorSuccess.Println("✅ Album download completed for", album.Title)
+					}
+				case "track":
+					track := selectedItem.(Track)
+					colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
+					// Now call the modified DownloadSingleTrack which expects a Track object
+					if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate); err != nil {
+						colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
+					} else {
+						colorSuccess.Println("✅ Track download completed for", track.Title)
+					}
+				default:
+					colorError.Println("❌ Unknown item type selected.")
+				}
+			}
+		},
 }
 
 var spotifyCmd = &cobra.Command{
@@ -166,66 +150,66 @@ var spotifyCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		config, api := initConfigAndAPI()
-		if config.Format != "flac" && !CheckFFmpeg() {
-			colorError.Println("❌ ffmpeg is not installed or not in your PATH. Please install ffmpeg to use the format conversion feature.")
-			return
-		}
-		url := args[0]
+			if config.Format != "flac" && !CheckFFmpeg() {
+				colorError.Println("❌ ffmpeg is not installed or not in your PATH. Please install ffmpeg to use the format conversion feature.")
+				return
+			}
+			url := args[0]
 
-		spotifyClient := NewSpotifyClient(config.SpotifyClientID, config.SpotifyClientSecret)
-		if err := spotifyClient.Authenticate(); err != nil {
-			colorError.Printf("❌ Failed to authenticate with Spotify: %v\n", err)
-			return
-		}
+			spotifyClient := NewSpotifyClient(config.SpotifyClientID, config.SpotifyClientSecret)
+			if err := spotifyClient.Authenticate(); err != nil {
+				colorError.Printf("❌ Failed to authenticate with Spotify: %v\n", err)
+				return
+			}
 
-		var spotifyTracks []SpotifyTrack
-		var err error
+			var spotifyTracks []SpotifyTrack
+			var err error
 
-		if strings.Contains(url, "/playlist/") {
-			spotifyTracks, _, err = spotifyClient.GetPlaylistTracks(url)
-		} else if strings.Contains(url, "/album/") {
-			spotifyTracks, _, err = spotifyClient.GetAlbumTracks(url) // I need to implement this
-		} else {
-			colorError.Println("❌ Invalid Spotify URL. Please provide a playlist or album URL.")
-			return
-		}
+			if strings.Contains(url, "/playlist/") {
+				spotifyTracks, _, err = spotifyClient.GetPlaylistTracks(url)
+			} else if strings.Contains(url, "/album/") {
+				spotifyTracks, _, err = spotifyClient.GetAlbumTracks(url) // I need to implement this
+			} else {
+				colorError.Println("❌ Invalid Spotify URL. Please provide a playlist or album URL.")
+				return
+			}
 
-		if err != nil {
-			colorError.Printf("❌ Failed to get tracks from Spotify: %v\n", err)
-			return
-		}
-
-		var tracks []string
-		for _, spotifyTrack := range spotifyTracks {
-			tracks = append(tracks, spotifyTrack.Name+" - "+spotifyTrack.Artist)
-		}
-
-		for _, trackName := range tracks {
-			selectedItems, itemTypes, err := handleSearch(context.Background(), api, trackName, "track", debug, auto)
 			if err != nil {
-				colorError.Printf("❌ Search failed for track %s: %v\n", trackName, err)
-				continue
+				colorError.Printf("❌ Failed to get tracks from Spotify: %v\n", err)
+				return
 			}
 
-			if len(selectedItems) == 0 {
-				colorWarning.Printf("⚠️ No results found for track: %s\n", trackName)
-				continue
+			var tracks []string
+			for _, spotifyTrack := range spotifyTracks {
+				tracks = append(tracks, spotifyTrack.Name+" - "+spotifyTrack.Artist)
 			}
 
-			for i, selectedItem := range selectedItems {
-				itemType := itemTypes[i]
-				if itemType == "track" {
-					track := selectedItem.(Track)
-					colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
-					if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate); err != nil {
-						colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
-					} else {
-						colorSuccess.Println("✅ Track download completed for", track.Title)
+			for _, trackName := range tracks {
+				selectedItems, itemTypes, err := handleSearch(context.Background(), api, trackName, "track", debug, auto)
+				if err != nil {
+					colorError.Printf("❌ Search failed for track %s: %v\n", trackName, err)
+					continue
+				}
+
+				if len(selectedItems) == 0 {
+					colorWarning.Printf("⚠️ No results found for track: %s\n", trackName)
+					continue
+				}
+
+				for i, selectedItem := range selectedItems {
+					itemType := itemTypes[i]
+					if itemType == "track" {
+						track := selectedItem.(Track)
+						colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
+						if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate); err != nil {
+							colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
+						} else {
+							colorSuccess.Println("✅ Track download completed for", track.Title)
+						}
 					}
 				}
 			}
-		}
-	},
+		},
 }
 
 var navidromeCmd = &cobra.Command{
@@ -282,7 +266,11 @@ var navidromeCmd = &cobra.Command{
 		var navidromeTrackIDs []string // New slice to store Navidrome track IDs
 
 		for _, spotifyTrack := range spotifyTracks { // Iterate over SpotifyTrack
-			track, err := navidromeClient.SearchTrack(spotifyTrack.Name, spotifyTrack.Artist) // Pass name and artist separately
+			trackName := spotifyTrack.Name
+			if ignoreSuffix != "" {
+				trackName = removeSuffix(trackName, ignoreSuffix)
+			}
+			track, err := navidromeClient.SearchTrack(trackName, spotifyTrack.Artist) // Pass name and artist separately
 			if err != nil {
 				colorWarning.Printf("⚠️ Error searching for track %s by %s on Navidrome: %v\n", spotifyTrack.Name, spotifyTrack.Artist, err)
 				continue
@@ -295,7 +283,11 @@ var navidromeCmd = &cobra.Command{
 				colorWarning.Printf("⚠️ Track %s by %s not found on Navidrome. Searching DAB...\n", spotifyTrack.Name, spotifyTrack.Artist)
 
 				// Search DAB for the track
-				dabSearchResults, dabItemTypes, err := handleSearch(context.Background(), api, spotifyTrack.Name+" - "+spotifyTrack.Artist, "track", debug, auto)
+				dabSearchQuery := spotifyTrack.Name + " - " + spotifyTrack.Artist
+				if ignoreSuffix != "" {
+					dabSearchQuery = trackName + " - " + spotifyTrack.Artist
+				}
+				dabSearchResults, dabItemTypes, err := handleSearch(context.Background(), api, dabSearchQuery, "track", debug, auto)
 				if err != nil {
 					colorError.Printf("❌ Failed to search DAB for %s: %v\n", spotifyTrack.Name, err)
 					continue
@@ -308,8 +300,8 @@ var navidromeCmd = &cobra.Command{
 
 					if selectedDabItemType == "track" {
 						dabTrack := selectedDabItem.(Track)
-			colorInfo.Printf("🎵 Downloading %s by %s from DAB...\n", dabTrack.Title, dabTrack.Artist)
-			if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, config.Format, config.Bitrate); err != nil {
+					colorInfo.Printf("🎵 Downloading %s by %s from DAB...\n", dabTrack.Title, dabTrack.Artist)
+						if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, config.Format, config.Bitrate); err != nil {
 							colorError.Printf("❌ Failed to download track %s from DAB: %v\n", dabTrack.Title, err)
 						} else {
 							colorSuccess.Printf("✅ Downloaded %s by %s from DAB. It should appear in Navidrome soon.\n", dabTrack.Title, dabTrack.Artist)
@@ -569,6 +561,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&navidromeURL, "navidrome-url", "", "Navidrome URL")
 	rootCmd.PersistentFlags().StringVar(&navidromeUsername, "navidrome-username", "", "Navidrome Username")
 	rootCmd.PersistentFlags().StringVar(&navidromePassword, "navidrome-password", "", "Navidrome Password")
+	navidromeCmd.Flags().StringVar(&ignoreSuffix, "ignore-suffix", "", "Ignore suffix when searching for tracks")
 
 	rootCmd.AddCommand(artistCmd)
 	rootCmd.AddCommand(albumCmd)
