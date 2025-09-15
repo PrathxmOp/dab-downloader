@@ -40,6 +40,7 @@ type Track struct {
 	ID          interface{} `json:"id"`
 	Title       string `json:"title"`
 	Artist      string `json:"artist"`
+	ArtistId    interface{} `json:"artistId"` // Added ArtistId field
 	Cover       string `json:"albumCover"`
 	ReleaseDate string `json:"releaseDate"`
 	Duration    int    `json:"duration"`

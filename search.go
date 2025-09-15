@@ -8,7 +8,7 @@ import (
 func handleSearch(ctx context.Context, api *DabAPI, query string, searchType string, debug bool, auto bool) ([]interface{}, []string, error) {
 	colorInfo.Printf("🔎 Searching for '%s' (type: %s)...", query, searchType)
 
-	results, err := api.Search(ctx, query, searchType, 10)
+	results, err := api.Search(ctx, query, searchType, 10, debug)
 	if err != nil {
 		return nil, nil, err
 	}

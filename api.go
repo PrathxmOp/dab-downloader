@@ -289,7 +289,7 @@ func (api *DabAPI) DownloadCover(ctx context.Context, coverURL string) ([]byte, 
 
 
 // Search searches for artists, albums, or tracks.
-func (api *DabAPI) Search(ctx context.Context, query string, searchType string, limit int) (*SearchResults, error) {
+func (api *DabAPI) Search(ctx context.Context, query string, searchType string, limit int, debug bool) (*SearchResults, error) {
 	results := &SearchResults{}
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -327,6 +327,9 @@ func (api *DabAPI) Search(ctx context.Context, query string, searchType string, 
 			mu.Lock()
 			defer mu.Unlock()
 
+			if debug {
+				fmt.Printf("DEBUG - Raw search response body: %s\n", string(body))
+			}
 			var data map[string]json.RawMessage
 			if err := json.Unmarshal(body, &data); err != nil {
 				errChan <- err
@@ -338,6 +341,20 @@ func (api *DabAPI) Search(ctx context.Context, query string, searchType string, 
 				if res, ok := data["artists"]; ok {
 					if err := json.Unmarshal(res, &results.Artists); err != nil {
 						errChan <- err
+					}
+				} else if res, ok := data["tracks"]; ok {
+					var tempTracks []Track
+					if err := json.Unmarshal(res, &tempTracks); err != nil {
+						errChan <- err
+						return
+					}
+					for _, track := range tempTracks {
+						// Create a new Artist struct and populate it from the track data
+						artist := Artist{
+							ID:   track.ArtistId,
+							Name: track.Artist,
+						}
+						results.Artists = append(results.Artists, artist)
 					}
 				} else if res, ok := data["results"]; ok {
 					if err := json.Unmarshal(res, &results.Artists); err != nil {
