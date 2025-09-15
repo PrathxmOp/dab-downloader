@@ -172,7 +172,7 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 
 
 // DownloadAlbum downloads all tracks from an album
-func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, parallelism int, debug bool, pool *pb.Pool, format string, bitrate string) (*DownloadStats, error) {
+func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Config, debug bool, pool *pb.Pool) (*DownloadStats, error) {
 	album, err := api.GetAlbum(ctx, albumID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get album info: %w", err)
@@ -180,6 +180,10 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, parallelis
 
 	artistDir := filepath.Join(api.outputLocation, SanitizeFileName(album.Artist))
 	albumDir := filepath.Join(artistDir, SanitizeFileName(album.Title))
+
+	if err := os.MkdirAll(albumDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create album directory: %w", err)
+	}
 
 	// Download cover
 	var coverData []byte
@@ -190,9 +194,16 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, parallelis
 		}
 	}
 
+	if config.SaveAlbumArt && coverData != nil {
+		coverPath := filepath.Join(albumDir, "cover.jpg")
+		if err := os.WriteFile(coverPath, coverData, 0644); err != nil {
+			colorWarning.Printf("⚠️ Failed to save cover art for album %s: %v\n", album.Title, err)
+		}
+	}
+
 	// Setup for concurrent downloads
 	var wg sync.WaitGroup
-	sem := semaphore.NewWeighted(int64(parallelism))
+	sem := semaphore.NewWeighted(int64(config.Parallelism))
 	stats := &DownloadStats{}
 	errorChan := make(chan trackError, len(album.Tracks))
 
@@ -247,7 +258,7 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, parallelis
 				}
 			}
 
-			if _, err := api.DownloadTrack(ctx, track, album, trackPath, coverData, bar, debug, format, bitrate); err != nil {
+			if _, err := api.DownloadTrack(ctx, track, album, trackPath, coverData, bar, debug, config.Format, config.Bitrate); err != nil {
 				errorChan <- trackError{track.Title, fmt.Errorf("track %s: %w", track.Title, err)}
 				return
 			}

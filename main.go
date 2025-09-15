@@ -54,7 +54,7 @@ var artistCmd = &cobra.Command{
 			}
 			artistID := args[0]
 			colorInfo.Println("🎵 Starting artist discography download for ID:", artistID)
-			if err := api.DownloadArtistDiscography(context.Background(), artistID, debug, filter, noConfirm, config.Format, config.Bitrate); err != nil {
+			if err := api.DownloadArtistDiscography(context.Background(), artistID, config, debug, filter, noConfirm); err != nil {
 				if errors.Is(err, ErrDownloadCancelled) {
 					colorWarning.Println("⚠️ Discography download cancelled by user.")
 				} else {
@@ -78,7 +78,7 @@ var albumCmd = &cobra.Command{
 			}
 			albumID := args[0]
 			colorInfo.Println("🎵 Starting album download for ID:", albumID)
-			if _, err := api.DownloadAlbum(context.Background(), albumID, config.Parallelism, debug, nil, config.Format, config.Bitrate); err != nil {
+			if _, err := api.DownloadAlbum(context.Background(), albumID, config, debug, nil); err != nil {
 				colorError.Printf("❌ Failed to download album: %v\n", err)
 			} else {
 				colorSuccess.Println("✅ Album download completed!")
@@ -115,7 +115,7 @@ var searchCmd = &cobra.Command{
 					artist := selectedItem.(Artist)
 					colorInfo.Println("🎵 Starting artist discography download for:", artist.Name)
 					artistIDStr := fmt.Sprintf("%v", artist.ID) // Convert ID to string
-					if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, debug, filter, noConfirm, config.Format, config.Bitrate); err != nil {
+					if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, config, debug, filter, noConfirm); err != nil {
 						colorError.Printf("❌ Failed to download discography for %s: %v\n", artist.Name, err)
 					} else {
 						colorSuccess.Println("✅ Discography download completed for", artist.Name)
@@ -123,7 +123,7 @@ var searchCmd = &cobra.Command{
 				case "album":
 					album := selectedItem.(Album)
 					colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
-					if _, err := api.DownloadAlbum(context.Background(), album.ID, config.Parallelism, debug, nil, config.Format, config.Bitrate); err != nil {
+					if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil); err != nil {
 						colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
 					} else {
 						colorSuccess.Println("✅ Album download completed for", album.Title)

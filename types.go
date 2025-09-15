@@ -25,6 +25,7 @@ type Config struct {
 	NavidromePassword   string
 	Format              string
 	Bitrate             string
+	SaveAlbumArt        bool   `json:"saveAlbumArt"`
 }
 
 // API client structure

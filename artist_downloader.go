@@ -14,7 +14,7 @@ import (
 )
 
 // DownloadArtistDiscography downloads an artist's complete discography
-func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID string, debug bool, filter string, noConfirm bool, format string, bitrate string) error {
+func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID string, config *Config, debug bool, filter string, noConfirm bool) error {
 	artist, err := api.GetArtist(ctx, artistID, debug)
 	if err != nil {
 		return fmt.Errorf("failed to get artist info: %w", err)
@@ -137,7 +137,7 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 
 	// Download each item
 	var wg sync.WaitGroup
-	sem := semaphore.NewWeighted(int64(5)) // Default parallelism
+	sem := semaphore.NewWeighted(int64(config.Parallelism)) // Default parallelism
 	stats := &DownloadStats{}
 	errorChan := make(chan trackError, len(itemsToDownload))
 
@@ -154,7 +154,7 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 			defer sem.Release(1)
 
 			colorInfo.Printf("🎵 Downloading %s %d/%d: %s\n", strings.ToUpper(item.Type), idx+1, len(itemsToDownload), item.Title)
-			itemStats, err := api.DownloadAlbum(ctx, item.ID, 5, debug, pool, format, bitrate)
+			itemStats, err := api.DownloadAlbum(ctx, item.ID, config, debug, pool)
 			if err != nil {
 				errorChan <- trackError{item.Title, fmt.Errorf("item %s: %w", item.Title, err)}
 			} else {
