@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.19-blue.svg)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-Educational-green.svg)](#license)
-[![Release](https://img.shields.io/github/v/release/PrathxmOp/dab-downloader)](https://github.com/PrathxmOp/dab-downloader/releases)
+[![Release](https://img.shields.io/github/v/release/PrathxmOp/dab-downloader)](https://github.com/PrathxmOp/dab-downloader/releases/latest)
 [![Signal Support](https://img.shields.io/badge/Support-Signal%20Group-blue.svg)](https://signal.group/#CjQKIARVUX48EP6g9DSPb2n1v6fAkxGQvdJJSWc4KLa4KFVyEhDCRiJon09heXcckPnkX6k2)
 
 > A powerful, modular music downloader that delivers high-quality FLAC files with comprehensive metadata support through the DAB API.
@@ -30,7 +30,7 @@
 
 ### Option 1: Pre-built Binary (Recommended)
 
-1. Download the latest release from our [GitHub Releases](https://github.com/PrathxmOp/dab-downloader/releases)
+1. Download the latest release from our [GitHub Releases](https://github.com/PrathxmOp/dab-downloader/releases/latest)
 2. Extract and run the executable
 3. Follow the interactive setup on first launch
 
