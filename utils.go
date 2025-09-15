@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -31,7 +32,7 @@ func GetUserInput(prompt, defaultValue string) string {
 // SanitizeFileName cleans a string to make it safe for use as a file name
 func SanitizeFileName(name string) string {
 	// Replace invalid characters with underscores
-	invalidChars := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*", "\x00"}
+	invalidChars := []string{"<", ">", ":", `"`, "/", `\`, "|", "?", "*", "\x00"}
 	result := name
 	for _, char := range invalidChars {
 		result = strings.ReplaceAll(result, char, "_")
@@ -92,11 +93,16 @@ func SaveConfig(filePath string, config *Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %%w", err)
 	}
+	dir := filepath.Dir(filePath)
+	if err := CreateDirIfNotExists(dir); err != nil {
+		return fmt.Errorf("failed to create config directory: %%w", err)
+	}
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %%w", err)
 	}
 	return nil
 }
+
 
 // TruncateString truncates a string to the specified length, adding ellipsis if truncated.
 func TruncateString(s string, maxLen int) string {

@@ -53,10 +53,20 @@ func (s *SpotifyClient) GetPlaylistTracks(playlistURL string) ([]SpotifyTrack, s
 	log.Printf("Spotify Playlist Name: %s", playlist.Name)
 
 	var tracks []SpotifyTrack // Updated type
-	for _, item := range playlist.Tracks.Tracks {
-		trackName := item.Track.Name
-		artistName := item.Track.Artists[0].Name
-		tracks = append(tracks, SpotifyTrack{Name: trackName, Artist: artistName}) // Updated append
+	for {
+		for _, item := range playlist.Tracks.Tracks {
+			trackName := item.Track.Name
+			artistName := item.Track.Artists[0].Name
+			tracks = append(tracks, SpotifyTrack{Name: trackName, Artist: artistName}) // Updated append
+		}
+
+		err = s.client.NextPage(context.Background(), &playlist.Tracks)
+		if err == spotify.ErrNoMorePages {
+			break
+		}
+		if err != nil {
+			return nil, "", err
+		}
 	}
 
 	return tracks, playlist.Name, nil // Updated return to include playlist.Name
