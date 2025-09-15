@@ -31,8 +31,16 @@
 ### Option 1: Pre-built Binary (Recommended)
 
 1. Download the latest release from our [GitHub Releases](https://github.com/PrathxmOp/dab-downloader/releases/latest)
-2. Extract and run the executable
-3. Follow the interactive setup on first launch
+2. Extract the archive.
+3. Grant execute permissions to the binary:
+   ```bash
+   chmod +x ./dab-downloader-linux-arm64 # Or the appropriate binary for your system
+   ```
+4. Run the executable:
+   ```bash
+   ./dab-downloader-linux-arm64 # Or the appropriate binary for your system
+   ```
+5. Follow the interactive setup on first launch
 
 ### Option 2: Build from Source
 
