@@ -15,7 +15,7 @@ type GitHubRelease struct {
 
 // CheckForUpdates checks for a newer version on GitHub
 func CheckForUpdates(currentVersion string) {
-	resp, err := http.Get("https://api.github.com/repos/Prathxm/dab-downloader/releases/latest")
+	resp, err := http.Get("https://api.github.com/repos/PrathxmOp/dab-downloader/releases/latest")
 	if err != nil {
 		fmt.Printf("Error checking for updates: %v\n", err)
 		return
