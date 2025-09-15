@@ -69,6 +69,50 @@ cp config/example-config.json config/config.json
 docker compose run dab-downloader search "your favorite artist"
 ```
 
+## 🔄 Update Guide
+
+Keeping your `dab-downloader` up-to-date ensures you have the latest features, bug fixes, and performance improvements.
+
+### Option 1: Pre-built Binary
+
+1.  **Download:** Visit the [GitHub Releases page](https://github.com/PrathxmOp/dab-downloader/releases/latest) and download the latest binary for your operating system and architecture.
+2.  **Replace:** Replace your existing `dab-downloader` executable with the newly downloaded one.
+3.  **Permissions (Linux/macOS):** If you encounter an "Exec format error" or "Permission denied", grant execute permissions:
+    ```bash
+    chmod +x ./dab-downloader-linux-arm64 # Or the appropriate binary for your system
+    ```
+
+### Option 2: Build from Source
+
+If you originally built `dab-downloader` from source, follow these steps to update:
+
+1.  **Navigate:** Go to your `dab-downloader` project directory.
+2.  **Pull Latest Changes:**
+    ```bash
+    git pull origin main
+    ```
+3.  **Rebuild:**
+    ```bash
+    go mod tidy
+    go build -o dab-downloader
+    ```
+
+### Option 3: Docker (Containerized)
+
+If you are using Docker, update your containerized version:
+
+1.  **Navigate:** Go to your `dab-downloader` project directory (where `docker-compose.yml` is located).
+2.  **Pull Latest Image:**
+    ```bash
+    docker compose pull
+    ```
+3.  **Rebuild/Restart:**
+    ```bash
+    docker compose build
+    docker compose up -d
+    ```
+    (Or `docker compose run dab-downloader ...` for single commands)
+
 ## 📋 Usage Guide
 
 ### 🔍 Search and Discover
