@@ -39,7 +39,17 @@ var rootCmd = &cobra.Command{
 	Use:     "dab-downloader",
 	Version: toolVersion, // Set the version here
 	Short:   "A high-quality FLAC music downloader for the DAB API.",
-	Long: fmt.Sprintf(`DAB Downloader (v%s) by %s\n\nA modular, high-quality FLAC music downloader with comprehensive metadata support for the DAB API.\nIt allows you to:\n- Download entire artist discographies.\n- Download full albums.\n- Download individual tracks (by fetching their respective album first).\n- Import and download Spotify playlists and albums.\n- Convert downloaded files to various formats (e.g., MP3, OGG, Opus) with specified bitrates.\n\nAll downloads feature smart categorization, duplicate detection, and embedded cover art.`, toolVersion, authorName),
+	Long: fmt.Sprintf(`DAB Downloader (v%s) by %s
+
+A modular, high-quality FLAC music downloader with comprehensive metadata support for the DAB API.
+It allows you to:
+- Download entire artist discographies.
+- Download full albums.
+- Download individual tracks (by fetching their respective album first).
+- Import and download Spotify playlists and albums.
+- Convert downloaded files to various formats (e.g., MP3, OGG, Opus) with specified bitrates.
+
+All downloads feature smart categorization, duplicate detection, and embedded cover art.`, toolVersion, authorName),
 }
 
 var artistCmd = &cobra.Command{
