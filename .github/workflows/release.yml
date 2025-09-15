@@ -35,13 +35,13 @@ jobs:
 
     - name: Build for Linux
       run: |
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=${{ env.TAG_NAME }}" -o dab-downloader-linux-amd64
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.toolVersion=${{ env.TAG_NAME }}" -o dab-downloader-linux-amd64
     - name: Build for Windows
       run: |
-        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version=${{ env.TAG_NAME }}" -o dab-downloader-windows-amd64.exe
+        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.toolVersion=${{ env.TAG_NAME }}" -o dab-downloader-windows-amd64.exe
     - name: Build for macOS
       run: |
-        CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.version=${{ env.TAG_NAME }}" -o dab-downloader-macos-amd64
+        CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.toolVersion=${{ env.TAG_NAME }}" -o dab-downloader-macos-amd64
 
     - name: Create and Push Git Tag
       run: |
@@ -63,3 +63,10 @@ jobs:
           ./dab-downloader-linux-amd64
           ./dab-downloader-windows-amd64.exe
           ./dab-downloader-macos-amd64
+
+    - name: Verify Release Creation
+      run: |
+        gh auth setup-git
+        gh release list
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
