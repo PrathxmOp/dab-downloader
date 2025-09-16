@@ -77,15 +77,27 @@ go build -o dab-downloader
 
 ### Option 3: Docker (Containerized)
 
-```bash
-# Build and run with Docker Compose
-docker compose build
-mkdir config music
-cp config/example-config.json config/config.json
+To run dab-downloader using a pre-built Docker image from Docker Hub:
 
-# Run any command
-docker compose run dab-downloader search "your favorite artist"
-```
+1.  **Ensure Docker is installed:** Follow the official Docker installation guide for your system.
+2.  **Configure with Docker Compose:**
+    *   Make sure your `docker-compose.yml` file is configured to use the `prathxm/dab-downloader:latest` image (as updated by the latest changes).
+    *   Create `config` and `music` directories if they don't exist:
+        ```bash
+        mkdir -p config music
+        ```
+    *   Copy the example configuration:
+        ```bash
+        cp config/example-config.json config/config.json
+        ```
+3.  **Run any command:**
+    ```bash
+    docker compose run dab-downloader search "your favorite artist"
+    ```
+    Or, to run in detached mode:
+    ```bash
+    docker compose up -d
+    ```
 
 ## 🔄 **CRITICAL: Staying Updated**
 
@@ -99,6 +111,11 @@ Since we're constantly fixing bugs and pushing updates, we recommend checking fo
 # Check for new releases
 curl -s https://api.github.com/repos/PrathxmOp/dab-downloader/releases/latest | grep "tag_name"
 ```
+
+### Versioning Format
+
+The application uses a versioning format of `vYYYYMMDD-gCOMMIT_HASH` (e.g., `v20250916-g9fb25ac`). This version is embedded into all binaries and Docker images during the build process, ensuring accurate version reporting and update checks.
+
 
 ### Option 1: Pre-built Binary Updates
 
@@ -126,15 +143,14 @@ If you built from source, update frequently:
 
 ### Option 3: Docker Updates
 
-For Docker users:
+For Docker users, pull the latest image from Docker Hub:
 
 1.  **Pull Latest Image:**
     ```bash
     docker compose pull
     ```
-2.  **Rebuild/Restart:**
+2.  **Restart Service:**
     ```bash
-    docker compose build
     docker compose up -d
     ```
 
