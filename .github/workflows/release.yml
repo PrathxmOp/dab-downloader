@@ -75,3 +75,41 @@ jobs:
         gh release list
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-push-docker:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: build # This job depends on the 'build' job to ensure TAG_NAME is available
+    permissions:
+      contents: read
+      packages: write # To push to GitHub Packages, or adjust for Docker Hub
+
+    steps:
+    - uses: actions/checkout@v3
+
+    # Re-generate TAG_NAME as it's needed in this job
+    - name: Get current date and commit hash for versioning
+      id: version_info
+      run: |
+        echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+        echo "COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+    - name: Set TAG_NAME
+      run: echo "TAG_NAME=v${{ env.DATE }}-${{ env.COMMIT }}" >> $GITHUB_ENV
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: |
+          prathxm/dab-downloader:${{ env.TAG_NAME }}
+          prathxm/dab-downloader:latest
+        build-args: |
+          VERSION=${{ env.TAG_NAME }}

@@ -1,5 +1,6 @@
 # Use a multi-stage build for a smaller final image
 
+ARG VERSION
 # Stage 1: Build the Go application
 FROM golang:1.21-alpine AS builder
 
@@ -18,7 +19,7 @@ COPY . .
 # Build the application
 # CGO_ENABLED=0 is important for static linking, making the binary self-contained
 # -ldflags="-s -w" reduces the binary size by stripping debug information
-RUN CGO_ENABLED=0 go build -o dab-downloader -ldflags="-s -w" .
+RUN CGO_ENABLED=0 go build -o dab-downloader -ldflags="-s -w -X 'main.toolVersion=$VERSION'" .
 
 # Stage 2: Create the final lean image
 FROM alpine:latest
