@@ -28,6 +28,7 @@ var (
 	spotifyClientID     string
 	spotifyClientSecret string
 	auto                bool
+	expandPlaylist      bool
 	navidromeURL        string
 	navidromeUsername   string
 	navidromePassword   string
@@ -209,6 +210,57 @@ var spotifyCmd = &cobra.Command{
 			if err != nil {
 				colorError.Printf("❌ Failed to get tracks from Spotify: %v\n", err)
 				return
+			}
+
+			if expandPlaylist {
+				colorInfo.Println("Expanding playlist to download full albums...")
+
+				// --- Logic for --expand flag ---
+			
+uniqueAlbums := make(map[string]SpotifyTrack)
+				for _, track := range spotifyTracks {
+					// Use a consistent key for the map
+					albumKey := strings.ToLower(track.AlbumName + " - " + track.AlbumArtist)
+					if _, exists := uniqueAlbums[albumKey]; !exists {
+					
+uniqueAlbums[albumKey] = track
+					}
+				}
+
+				colorInfo.Printf("Found %d unique albums in the playlist.\n", len(uniqueAlbums))
+
+				for _, track := range uniqueAlbums {
+					albumSearchQuery := track.AlbumName + " - " + track.AlbumArtist
+					colorInfo.Printf("Searching for album: %s\n", albumSearchQuery)
+
+					// Use handleSearch to find the album on DAB
+					selectedItems, itemTypes, err := handleSearch(context.Background(), api, albumSearchQuery, "album", debug, auto)
+					if err != nil {
+						colorError.Printf("❌ Search failed for album '%s': %v\n", albumSearchQuery, err)
+						continue // Move to the next album
+					}
+
+					if len(selectedItems) == 0 {
+						colorWarning.Printf("⚠️ No results found for album: %s\n", albumSearchQuery)
+						continue
+					}
+
+					// Download the first result (or the one selected by the user)
+					for i, selectedItem := range selectedItems {
+						if itemTypes[i] == "album" {
+							album := selectedItem.(Album)
+							colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
+							if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil); err != nil {
+								colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
+							} else {
+								colorSuccess.Println("✅ Album download completed for", album.Title)
+							}
+						break // Only download the first album result for this search
+						}
+					}
+				}
+				// --- End of logic for --expand flag ---
+				return // Exit after album downloads are done
 			}
 
 			var tracks []string
@@ -613,6 +665,7 @@ func init() {
 
 	spotifyCmd.Flags().StringVar(&spotifyPlaylist, "spotify", "", "Spotify playlist URL to download")
 	spotifyCmd.Flags().BoolVar(&auto, "auto", false, "Automatically download the first result")
+	spotifyCmd.Flags().BoolVar(&expandPlaylist, "expand", false, "Expand playlist tracks to download the full albums")
 	spotifyCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to after downloading (e.g., mp3, ogg, opus)")
 	spotifyCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats (in kbps, e.g., 192, 256, 320)")
 	rootCmd.PersistentFlags().StringVar(&spotifyClientID, "spotify-client-id", "", "Spotify Client ID")

@@ -13,8 +13,10 @@ import (
 
 // SpotifyTrack represents a track from Spotify
 type SpotifyTrack struct {
-	Name   string
-	Artist string
+	Name        string
+	Artist      string
+	AlbumName   string
+	AlbumArtist string
 }
 
 // Authenticate authenticates the client with the spotify api
@@ -55,9 +57,19 @@ func (s *SpotifyClient) GetPlaylistTracks(playlistURL string) ([]SpotifyTrack, s
 	var tracks []SpotifyTrack // Updated type
 	for {
 		for _, item := range playlist.Tracks.Tracks {
+			if item.Track.Album.Name == "" {
+				continue // Skip tracks with no album info
+			}
 			trackName := item.Track.Name
 			artistName := item.Track.Artists[0].Name
-			tracks = append(tracks, SpotifyTrack{Name: trackName, Artist: artistName}) // Updated append
+			albumName := item.Track.Album.Name
+			albumArtist := item.Track.Album.Artists[0].Name
+			tracks = append(tracks, SpotifyTrack{
+				Name:        trackName,
+				Artist:      artistName,
+				AlbumName:   albumName,
+				AlbumArtist: albumArtist,
+			}) // Updated append
 		}
 
 		err = s.client.NextPage(context.Background(), &playlist.Tracks)
@@ -93,7 +105,12 @@ func (s *SpotifyClient) GetAlbumTracks(albumURL string) ([]SpotifyTrack, string,
 	for _, track := range album.Tracks.Tracks {
 		trackName := track.Name
 		artistName := track.Artists[0].Name
-		tracks = append(tracks, SpotifyTrack{Name: trackName, Artist: artistName})
+		tracks = append(tracks, SpotifyTrack{
+			Name:        trackName,
+			Artist:      artistName,
+			AlbumName:   album.Name,
+			AlbumArtist: album.Artists[0].Name,
+		})
 	}
 
 	return tracks, album.Name, nil
