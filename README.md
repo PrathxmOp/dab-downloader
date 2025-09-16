@@ -182,8 +182,14 @@ For Docker users:
 # Download entire Spotify album
 ./dab-downloader spotify <album_url>
 
+# Expand playlist to download full albums
+./dab-downloader spotify <playlist_url> --expand
+
 # Auto-download (no manual selection)
 ./dab-downloader spotify <playlist_url> --auto
+
+# Auto-download expanded albums from a playlist
+./dab-downloader spotify <playlist_url> --expand --auto
 ```
 
 ### 🎵 Navidrome Integration
