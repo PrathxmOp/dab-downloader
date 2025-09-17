@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -9,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"encoding/json" // This line should be here
+	
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/fatih/color"
@@ -116,12 +117,14 @@ var searchCmd = &cobra.Command{
 			var pool *pb.Pool
 			var localPool bool
 			if isTTY() && len(selectedItems) > 1 { // Only create pool if multiple items and TTY
+				var err error
 				pool, err = pb.StartPool()
 				if err != nil {
 					colorError.Printf("❌ Failed to start progress bar pool: %v\n", err)
-					return // Exit if pool cannot be started
+					// Continue without the pool
+				} else {
+					localPool = true
 				}
-				localPool = true
 			}
 
 			for i, selectedItem := range selectedItems {
@@ -262,12 +265,14 @@ uniqueAlbums[albumKey] = track
 			var pool *pb.Pool
 			var localPool bool
 			if isTTY() && len(spotifyTracks) > 1 { // Only create pool if multiple items and TTY
+				var err error
 				pool, err = pb.StartPool()
 				if err != nil {
 					colorError.Printf("❌ Failed to start progress bar pool: %v\n", err)
-					return // Exit if pool cannot be started
+					// Continue without the pool
+				} else {
+					localPool = true
 				}
-				localPool = true
 			}
 
 			for _, spotifyTrack := range spotifyTracks {
@@ -687,28 +692,21 @@ func init() {
 }
 
 func main() {
-	// Load config to get IsDockerContainer and DisableUpdateCheck
-	config, _ := initConfigAndAPI() // Temporarily load config here to get IsDockerContainer
-
-	// Check if running in Docker
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		config.IsDockerContainer = true
-	}
-
-	// Read local version.json to set toolVersion for display
-	localVersionFile, err := os.ReadFile("./version/version.json")
-	if err != nil {
-		// Use fmt.Printf as colorError might not be initialized yet
-		fmt.Printf("Error reading local version.json for display: %v\n", err)
-		toolVersion = "unknown" // Fallback
-	} else {
-		var localVersionInfo VersionInfo
-		if err := json.Unmarshal(localVersionFile, &localVersionInfo); err != nil {
-			// Use fmt.Printf as colorError might not be initialized yet
-			fmt.Printf("Error unmarshaling local version.json for display: %v\n", err)
-			toolVersion = "unknown" // Fallback
+	// toolVersion is the variable the linker will try to set.
+	// If it's empty, it means we're running from a source build without ldflags.
+	if toolVersion == "" {
+		// Fallback to reading the version file.
+		localVersionFile, err := os.ReadFile("./version/version.json")
+		if err != nil {
+			// If we can't read it, set a default so we don't crash.
+			toolVersion = "unknown-source-build"
 		} else {
-			toolVersion = localVersionInfo.Version
+			var localVersionInfo VersionInfo
+			if json.Unmarshal(localVersionFile, &localVersionInfo) == nil {
+				toolVersion = localVersionInfo.Version + "-source" // Add a suffix to make it clear
+			} else {
+				toolVersion = "unknown-source-build"
+			}
 		}
 	}
 
@@ -719,6 +717,13 @@ func main() {
 	rootCmd.Long = fmt.Sprintf("DAB Downloader (v%s) by %s\n\nA modular, high-quality FLAC music downloader with comprehensive metadata support for the DAB API.\nIt allows you to:\n- Download entire artist discographies.\n- Download full albums.\n- Download individual tracks (by fetching their respective album first).\n- Import and download Spotify playlists and albums.\n- Convert downloaded files to various formats (e.g., MP3, OGG, Opus) with specified bitrates.\n\nAll downloads feature smart categorization, duplicate detection, and embedded cover art.", toolVersion, authorName)
 
 	// Now call CheckForUpdates with the config
+	config, _ := initConfigAndAPI() // Temporarily load config here to get IsDockerContainer
+
+	// Check if running in Docker
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		config.IsDockerContainer = true
+	}
+
 	CheckForUpdates(config)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

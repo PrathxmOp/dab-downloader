@@ -125,20 +125,17 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 		return fmt.Errorf("failed to create artist directory: %w", err)
 	}
 
-	// Create a pool of progress bars
+	var wg sync.WaitGroup
+	sem := semaphore.NewWeighted(int64(config.Parallelism))
+	stats := &DownloadStats{}
+	errorChan := make(chan trackError, len(itemsToDownload))
 	var pool *pb.Pool
 	if isTTY() {
-		if debug {
-			colorInfo.Println("DEBUG: isTTY() is true. Attempting to start progress bar pool.")
-		}
-		var err error
-		pool, err = pb.StartPool()
-		if err != nil {
-			colorError.Printf("❌ Failed to start progress bar pool: %v\n", err)
-			return fmt.Errorf("failed to start progress bar pool: %w", err)
-		}
-		if debug {
-			colorInfo.Println("DEBUG: Progress bar pool started successfully.")
+		var poolErr error
+		pool, poolErr = pb.StartPool()
+		if poolErr != nil {
+			colorError.Printf("❌ Failed to start progress bar pool: %v\n", poolErr)
+			// Continue without the pool
 		}
 	} else {
 		if debug {
@@ -147,10 +144,6 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 	}
 
 	// Download each item
-	var wg sync.WaitGroup
-	sem := semaphore.NewWeighted(int64(config.Parallelism)) // Default parallelism
-	stats := &DownloadStats{}
-	errorChan := make(chan trackError, len(itemsToDownload))
 
 	for idx, item := range itemsToDownload {
 		wg.Add(1)

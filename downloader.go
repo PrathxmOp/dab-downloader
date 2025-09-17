@@ -216,11 +216,14 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 
 	var localPool bool
 	if pool == nil && isTTY() {
+		var err error
 		pool, err = pb.StartPool()
 		if err != nil {
-			return nil, fmt.Errorf("failed to start progress bar pool: %w", err)
+			colorError.Printf("❌ Failed to start progress bar pool: %v\n", err)
+			// Continue without the pool
+		} else {
+			localPool = true
 		}
-		localPool = true
 	}
 
 	// Loop through tracks and start a goroutine for each download
