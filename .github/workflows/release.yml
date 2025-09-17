@@ -12,9 +12,15 @@ jobs:
     permissions:
       contents: write # Grant write permissions for GITHUB_TOKEN to create releases and upload assets
     outputs:
-      tag_name: ${{ steps.create_release.outputs.tag_name }} # Output the tag name
+      tag_name: ${{ env.VERSION }} # Output the version from version.json
     steps:
     - uses: actions/checkout@v3
+
+    - name: Get version from version.json
+      id: get_version
+      run: |
+        VERSION=$(cat version/version.json | jq -r '.version')
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -44,8 +50,8 @@ jobs:
       run: |
         git config user.name github-actions
         git config user.email github-actions@github.com
-        git tag ${{ env.TAG_NAME }}
-        git push origin ${{ env.TAG_NAME }}
+        git tag ${{ env.VERSION }}
+        git push origin ${{ env.VERSION }}
 
     - name: Create GitHub Release
       id: create_release # Added ID
@@ -53,8 +59,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ env.TAG_NAME }}
-        name: Release ${{ env.TAG_NAME }}
+        tag_name: ${{ env.VERSION }} # Use version from version.json
+        name: Release ${{ env.VERSION }}
         draft: false
         prerelease: false
         files: |
