@@ -19,7 +19,6 @@ require (
 require (
 	github.com/delucks/go-subsonic v0.0.0-20240806025900-2a743ec36238
 	github.com/mattn/go-isatty v0.0.20
-	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 )
 
 require (
@@ -27,6 +26,7 @@ require (
 	github.com/ddliu/go-httpclient v0.7.1 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect

@@ -25,7 +25,15 @@ type Config struct {
 	NavidromePassword   string
 	Format              string
 	Bitrate             string
-	SaveAlbumArt        bool   `json:"saveAlbumArt"`
+	SaveAlbumArt        bool
+	DisableUpdateCheck  bool `json:"DisableUpdateCheck"`
+	IsDockerContainer   bool `json:"-"` // Not saved to config.json
+	UpdateRepo          string `json:"UpdateRepo"`
+}
+
+// VersionInfo represents the structure of our version.json file
+type VersionInfo struct {
+	Version string `json:"version"`
 }
 
 

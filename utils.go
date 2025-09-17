@@ -80,10 +80,10 @@ func GetTrackFilename(trackNumber int, title string) string {
 func LoadConfig(filePath string, config *Config) error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to read config file: %%w", err)
+		return fmt.Errorf("failed to read config file: %w", err)
 	}
 	if err := json.Unmarshal(data, config); err != nil {
-		return fmt.Errorf("failed to unmarshal config: %%w", err)
+		return fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 	return nil
 }
@@ -92,14 +92,14 @@ func LoadConfig(filePath string, config *Config) error {
 func SaveConfig(filePath string, config *Config) error {
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %%w", err)
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 	dir := filepath.Dir(filePath)
 	if err := CreateDirIfNotExists(dir); err != nil {
-		return fmt.Errorf("failed to create config directory: %%w", err)
+		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %%w", err)
+		return fmt.Errorf("failed to write config file: %w", err)
 	}
 	return nil
 }

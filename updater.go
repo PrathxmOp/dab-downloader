@@ -3,22 +3,45 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt" // Added this import
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
-	"time"
+
+	version "github.com/hashicorp/go-version" // Added this import
 )
 
-// GitHubRelease represents a simplified structure of a GitHub release API response
-type GitHubRelease struct {
-	TagName string `json:"tag_name"`
-}
+
 
 // CheckForUpdates checks for a newer version on GitHub
-func CheckForUpdates(currentVersion string) {
-	resp, err := http.Get("https://api.github.com/repos/PrathxmOp/dab-downloader/releases/latest")
+func CheckForUpdates(config *Config) {
+	if config.DisableUpdateCheck {
+		colorInfo.Println("Skipping update check as DisableUpdateCheck is enabled in config.")
+		return
+	}
+	// Read local version.json
+	localVersionFile, err := os.ReadFile("./version/version.json")
+	if err != nil {
+		colorError.Printf("Error reading local version.json: %v\n", err)
+		return
+	}
+
+	var localVersionInfo VersionInfo
+	if err := json.Unmarshal(localVersionFile, &localVersionInfo); err != nil {
+		colorError.Printf("Error unmarshaling local version.json: %v\n", err)
+		return
+	}
+	var currentVersion = localVersionInfo.Version
+
+	// Fetch remote version.json
+	repoURL := "PrathxmOp/dab-downloader" // Default value
+	if config.UpdateRepo != "" {
+		repoURL = config.UpdateRepo
+	}
+	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/main/version/version.json", repoURL)
+	resp, err := http.Get(rawURL)
 	if err != nil {
 		colorError.Printf("Error checking for updates: %v\n", err)
 		return
@@ -30,13 +53,14 @@ func CheckForUpdates(currentVersion string) {
 		return
 	}
 
-	var release GitHubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		colorError.Printf("Error decoding GitHub API response: %v\n", err)
+	var remoteVersionInfo VersionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&remoteVersionInfo); err != nil {
+		colorError.Printf("Error decoding remote version.json: %v\n", err)
 		return
 	}
 
-	latestVersion := release.TagName
+	latestVersion := remoteVersionInfo.Version
+
 
 	if isNewerVersion(latestVersion, currentVersion) {
 		colorError.Printf("🚨 You are using an outdated version (%s) of dab-downloader! A new version (%s) is available.\n", currentVersion, latestVersion)
@@ -48,7 +72,7 @@ func CheckForUpdates(currentVersion string) {
 		if input == "y" || input == "" {
 			colorInfo.Println("Attempting to open the Update Guide in your browser...")
 			updateURL := "https://github.com/PrathxmOp/dab-downloader/#-update-guide"
-			if err := openBrowser(updateURL); err != nil {
+			if err := openBrowser(updateURL, config); err != nil {
 				colorWarning.Printf("Failed to open browser automatically: %v\n", err)
 				colorInfo.Println("Please refer to the 'Update Guide' section in the README for detailed instructions:")
 				colorInfo.Println(updateURL)
@@ -61,9 +85,15 @@ func CheckForUpdates(currentVersion string) {
 	}
 }
 
-func openBrowser(url string) error {
+func openBrowser(url string, config *Config) error {
+	if config.IsDockerContainer {
+		colorInfo.Printf("Running in Docker, please open the update guide manually: %s\n", url)
+		return nil
+	}
+
 	var cmd string
 	var args []string
+
 
 	switch runtime.GOOS {
 	case "windows":
@@ -80,45 +110,30 @@ func openBrowser(url string) error {
 	return exec.Command(cmd, args...).Start()
 }
 
-// isNewerVersion compares two versions in vYYYYMMDD-commit_hash format
+// isNewerVersion compares two versions using semantic versioning
 func isNewerVersion(latest, current string) bool {
-
-
-	// Extract date parts
-	latestDateStr := extractDateFromVersion(latest)
-	currentDateStr := extractDateFromVersion(current)
-
-	if latestDateStr == "" || currentDateStr == "" {
-		// Fallback to simple string comparison if date extraction fails
-		return latest > current
-	}
-
-	latestDate, err := time.Parse("20060102", latestDateStr)
+	vLatest, err := version.NewVersion(latest)
 	if err != nil {
-		return latest > current // Fallback
+		colorWarning.Printf("⚠️ Error parsing latest version '%s': %v\n", latest, err)
+		return false // Cannot determine if newer, assume not
 	}
-	currentDate, err := time.Parse("20060102", currentDateStr)
+
+	vCurrent, err := version.NewVersion(current)
 	if err != nil {
-		return latest > current // Fallback
+		colorWarning.Printf("⚠️ Error parsing current version '%s': %v\n", current, err)
+		return false // Cannot determine if newer, assume not
 	}
 
-	if latestDate.After(currentDate) {
-		return true
-	}
-	if latestDate.Before(currentDate) {
-		return false
-	}
-
-	// If dates are equal, compare the full version string (which includes commit hash)
-	return latest > current
+	return vLatest.GreaterThan(vCurrent)
 }
 
-func extractDateFromVersion(version string) string {
-	if strings.HasPrefix(version, "v") && strings.Contains(version, "-") {
-		parts := strings.Split(version[1:], "-") // Remove 'v' and split by '-'
-		if len(parts) > 0 && len(parts[0]) == 8 { // Check if it looks like YYYYMMDD
-			return parts[0]
-		}
-	}
-	return ""
-}
+// extractDateFromVersion is no longer needed with semantic versioning
+// func extractDateFromVersion(version string) string {
+// 	if strings.HasPrefix(version, "v") && strings.Contains(version, "-") {
+// 		parts := strings.Split(version[1:], "-") // Remove 'v' and split by '-'
+// 		if len(parts) > 0 && len(parts[0]) == 8 { // Check if it looks like YYYYMMDD
+// 			return parts[0]
+// 		}
+// 	}
+// 	return ""
+// }

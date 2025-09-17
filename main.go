@@ -9,8 +9,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"encoding/json" // This line should be here
 
 	"github.com/cheggaaa/pb/v3"
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -39,19 +41,7 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:     "dab-downloader",
-	Version: toolVersion, // Set the version here
 	Short:   "A high-quality FLAC music downloader for the DAB API.",
-	Long: fmt.Sprintf(`DAB Downloader (v%s) by %s
-
-A modular, high-quality FLAC music downloader with comprehensive metadata support for the DAB API.
-It allows you to:
-- Download entire artist discographies.
-- Download full albums.
-- Download individual tracks (by fetching their respective album first).
-- Import and download Spotify playlists and albums.
-- Convert downloaded files to various formats (e.g., MP3, OGG, Opus) with specified bitrates.
-
-All downloads feature smart categorization, duplicate detection, and embedded cover art.`, toolVersion, authorName),
 }
 
 var artistCmd = &cobra.Command{
@@ -538,6 +528,7 @@ func printInstallInstructions() {
 }
 
 func initConfigAndAPI() (*Config, *DabAPI) {
+	color.NoColor = !isTTY() // Initialize color output
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		colorWarning.Println("⚠️ Could not determine home directory, will use current directory for downloads.")
@@ -548,6 +539,7 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 		APIURL:           "https://dab.yeet.su",
 		DownloadLocation: filepath.Join(homeDir, "Music"),
 		Parallelism:      5,
+		UpdateRepo:       "PrathxmOp/dab-downloader", // Default value
 	}
 
 	// Define the config file path in the current directory
@@ -586,6 +578,9 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 		// Prompt for Format and Bitrate
 		config.Format = GetUserInput("Enter default output format (e.g., flac, mp3, ogg, opus)", "flac")
 		config.Bitrate = GetUserInput("Enter default bitrate for lossy formats (e.g., 320)", "320")
+
+		// Prompt for Update Repository
+		config.UpdateRepo = GetUserInput("Enter GitHub repository for updates (e.g., PrathxmOp/dab-downloader)", "PrathxmOp/dab-downloader")
 
 		// Save the new config
 		if err := SaveConfig(configFile, config); err != nil {
@@ -692,7 +687,39 @@ func init() {
 }
 
 func main() {
-	CheckForUpdates(toolVersion)
+	// Load config to get IsDockerContainer and DisableUpdateCheck
+	config, _ := initConfigAndAPI() // Temporarily load config here to get IsDockerContainer
+
+	// Check if running in Docker
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		config.IsDockerContainer = true
+	}
+
+	// Read local version.json to set toolVersion for display
+	localVersionFile, err := os.ReadFile("./version/version.json")
+	if err != nil {
+		// Use fmt.Printf as colorError might not be initialized yet
+		fmt.Printf("Error reading local version.json for display: %v\n", err)
+		toolVersion = "unknown" // Fallback
+	} else {
+		var localVersionInfo VersionInfo
+		if err := json.Unmarshal(localVersionFile, &localVersionInfo); err != nil {
+			// Use fmt.Printf as colorError might not be initialized yet
+			fmt.Printf("Error unmarshaling local version.json for display: %v\n", err)
+			toolVersion = "unknown" // Fallback
+		} else {
+			toolVersion = localVersionInfo.Version
+		}
+	}
+
+	// Set rootCmd.Version after toolVersion is populated
+	rootCmd.Version = toolVersion
+
+	// Set rootCmd.Long after toolVersion is populated
+	rootCmd.Long = fmt.Sprintf("DAB Downloader (v%s) by %s\n\nA modular, high-quality FLAC music downloader with comprehensive metadata support for the DAB API.\nIt allows you to:\n- Download entire artist discographies.\n- Download full albums.\n- Download individual tracks (by fetching their respective album first).\n- Import and download Spotify playlists and albums.\n- Convert downloaded files to various formats (e.g., MP3, OGG, Opus) with specified bitrates.\n\nAll downloads feature smart categorization, duplicate detection, and embedded cover art.", toolVersion, authorName)
+
+	// Now call CheckForUpdates with the config
+	CheckForUpdates(config)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
