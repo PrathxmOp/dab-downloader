@@ -719,19 +719,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-ll downloads feature smart categorization, duplicate detection, and embedded cover art.", toolVersion, authorName)
-
-	// Now call CheckForUpdates with the config
-	config, _ := initConfigAndAPI() // Temporarily load config here to get IsDockerContainer
-
-	// Check if running in Docker
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		config.IsDockerContainer = true
-	}
-
-	CheckForUpdates(config)
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-}
