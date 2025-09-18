@@ -53,14 +53,23 @@ jobs:
         git tag ${{ env.VERSION }}
         git push origin ${{ env.VERSION }}
 
+    - name: Generate Changelog
+      id: generate_changelog
+      run: |
+        CHANGELOG=$(git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s (%h)")
+        echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+        echo "$CHANGELOG" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+
     - name: Create GitHub Release
-      id: create_release # Added ID
+      id: create_release
       uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ env.VERSION }} # Use version from version.json
+        tag_name: ${{ env.VERSION }}
         name: Release ${{ env.VERSION }}
+        body: ${{ env.CHANGELOG }}
         draft: false
         prerelease: false
         files: |
