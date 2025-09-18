@@ -226,6 +226,22 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 		}
 	}
 
+	// Create all progress bars first
+	bars := make([]*pb.ProgressBar, len(album.Tracks))
+	if pool != nil {
+		for i, track := range album.Tracks {
+			trackNumber := track.TrackNumber
+			if trackNumber == 0 {
+				trackNumber = i + 1
+			}
+			bar := pb.New(0)
+			bar.SetTemplateString(`{{ string . "prefix" }} {{ bar . }} {{ percent . }} | {{ speed . "%s/s" }} | ETA {{ rtime . "%s" }}`)
+			bar.Set("prefix", fmt.Sprintf("Track %-2d: %-40s", trackNumber, TruncateString(track.Title, 40)))
+			bars[i] = bar
+			pool.Add(bar)
+		}
+	}
+
 	// Loop through tracks and start a goroutine for each download
 	for idx, track := range album.Tracks {
 		wg.Add(1)
@@ -253,19 +269,9 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 				return
 			}
 
-			// Create a new progress bar for each track
 			var bar *pb.ProgressBar
 			if pool != nil {
-				bar = pb.New(0)
-				bar.SetTemplateString(`{{ string . "prefix" }} {{ bar . }} {{ percent . }} | {{ speed . "%s/s" }} | ETA {{ rtime . "%s" }}`)
-				bar.Set("prefix", fmt.Sprintf("Track %-2d: %-40s", trackNumber, TruncateString(track.Title, 40)))
-				if debug {
-					fmt.Printf("DEBUG: Created progress bar for track %s\n", track.Title)
-				}
-				pool.Add(bar)
-				if debug {
-					fmt.Printf("DEBUG: Added progress bar for track %s to the pool\n", track.Title)
-				}
+				bar = bars[idx]
 			}
 
 			if _, err := api.DownloadTrack(ctx, track, album, trackPath, coverData, bar, debug, config.Format, config.Bitrate); err != nil {
