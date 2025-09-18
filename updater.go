@@ -71,11 +71,11 @@ func CheckForUpdates(config *Config) {
 
 		if input == "y" || input == "" {
 			colorInfo.Println("Attempting to open the Update Guide in your browser...")
-			updateURL := "https://github.com/PrathxmOp/dab-downloader/#-update-guide"
+			updateURL := "https://github.com/PrathxmOp/dab-downloader/#update-guide"
 			if err := openBrowser(updateURL, config); err != nil {
 				colorWarning.Printf("Failed to open browser automatically: %v\n", err)
 				colorInfo.Println("Please refer to the 'Update Guide' section in the README for detailed instructions:")
-				colorInfo.Println(updateURL)
+				colorInfo.Println("https://github.com/PrathxmOp/dab-downloader/#update-guide")
 			}
 		} else {
 			colorInfo.Println("You can update later by referring to the 'Update Guide' in the README.")

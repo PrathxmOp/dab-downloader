@@ -109,7 +109,7 @@ Since we're constantly fixing bugs and pushing updates, we recommend checking fo
 
 ```bash
 # Check for new releases
-curl -s https://api.github.com/repos/PrathxmOp/dab-downloader/releases/latest | grep "tag_name"
+./dab-downloader --version
 ```
 
 ### Versioning Format
@@ -469,3 +469,23 @@ If you're willing to help us through the unstable development phase:
 - `74a6667`: fix: use cross-platform home directory for default download location
 - `114edc8`: fix: handle pagination in spotify playlists and create config dir if not exists
 - `283887b`: fix: Handle numeric artist IDs from API
+
+---
+
+## Update Guide
+
+The tool has a built-in update checker. If a new version is available, it will prompt you to update and attempt to open the update guide in your browser.
+
+If the tool fails to open the browser, you can manually update by following these steps:
+
+1.  **Go to the [GitHub Releases page](https://github.com/PrathxmOp/dab-downloader/releases/latest).**
+2.  **Download the latest release** for your operating system and architecture.
+3.  **Extract the archive.**
+4.  **Replace your existing `dab-downloader` executable** with the newly downloaded one.
+5.  **(Linux/macOS only) Grant execute permissions** to the new binary:
+
+    ```bash
+    chmod +x ./dab-downloader-linux-amd64
+    ```
+
+    (Replace `./dab-downloader-linux-amd64` with the actual name of the binary you downloaded).
