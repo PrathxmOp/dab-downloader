@@ -16,24 +16,11 @@ import (
 
 
 // CheckForUpdates checks for a newer version on GitHub
-func CheckForUpdates(config *Config) {
+func CheckForUpdates(config *Config, currentVersion string) {
 	if config.DisableUpdateCheck {
 		colorInfo.Println("Skipping update check as DisableUpdateCheck is enabled in config.")
 		return
 	}
-	// Read local version.json
-	localVersionFile, err := os.ReadFile("./version/version.json")
-	if err != nil {
-		colorError.Printf("Error reading local version.json: %v\n", err)
-		return
-	}
-
-	var localVersionInfo VersionInfo
-	if err := json.Unmarshal(localVersionFile, &localVersionInfo); err != nil {
-		colorError.Printf("Error unmarshaling local version.json: %v\n", err)
-		return
-	}
-	var currentVersion = localVersionInfo.Version
 
 	// Fetch remote version.json
 	repoURL := "PrathxmOp/dab-downloader" // Default value

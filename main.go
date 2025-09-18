@@ -692,29 +692,34 @@ func init() {
 }
 
 func main() {
-	// toolVersion is the variable the linker will try to set.
-	// If it's empty, it means we're running from a source build without ldflags.
-	if toolVersion == "" {
-		// Fallback to reading the version file.
-		localVersionFile, err := os.ReadFile("./version/version.json")
-		if err != nil {
-			// If we can't read it, set a default so we don't crash.
-			toolVersion = "unknown-source-build"
-		} else {
-			var localVersionInfo VersionInfo
-			if json.Unmarshal(localVersionFile, &localVersionInfo) == nil {
-				toolVersion = localVersionInfo.Version + "-source" // Add a suffix to make it clear
-			} else {
-				toolVersion = "unknown-source-build"
-			}
-		}
+	var versionInfo VersionInfo
+	if err := json.Unmarshal(versionJSON, &versionInfo); err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading embedded version.json: %v\n", err)
+		os.Exit(1)
 	}
+	toolVersion = versionInfo.Version
 
 	// Set rootCmd.Version after toolVersion is populated
 	rootCmd.Version = toolVersion
 
 	// Set rootCmd.Long after toolVersion is populated
 	rootCmd.Long = fmt.Sprintf("DAB Downloader (v%s) by %s\n\nA modular, high-quality FLAC music downloader with comprehensive metadata support for the DAB API.\nIt allows you to:\n- Download entire artist discographies.\n- Download full albums.\n- Download individual tracks (by fetching their respective album first).\n- Import and download Spotify playlists and albums.\n- Convert downloaded files to various formats (e.g., MP3, OGG, Opus) with specified bitrates.\n\nAll downloads feature smart categorization, duplicate detection, and embedded cover art.", toolVersion, authorName)
+
+	// Now call CheckForUpdates with the config
+	config, _ := initConfigAndAPI() // Temporarily load config here to get IsDockerContainer
+
+	// Check if running in Docker
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		config.IsDockerContainer = true
+	}
+
+	CheckForUpdates(config, toolVersion)
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+ll downloads feature smart categorization, duplicate detection, and embedded cover art.", toolVersion, authorName)
 
 	// Now call CheckForUpdates with the config
 	config, _ := initConfigAndAPI() // Temporarily load config here to get IsDockerContainer
