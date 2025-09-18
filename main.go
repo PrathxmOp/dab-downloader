@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/fatih/color"
@@ -19,6 +19,9 @@ import (
 
 var toolVersion string
 const authorName = "Prathxm"
+
+//go:embed version/version.json
+var versionJSON []byte
 
 var (
 	apiURL              string
