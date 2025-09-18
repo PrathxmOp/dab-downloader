@@ -46,7 +46,30 @@
 
 ## 🚀 Quick Start
 
-### Option 1: Pre-built Binary (Recommended)
+### Option 1: Using `auto-dl.sh` Script (Recommended)
+
+This script simplifies the process of downloading and keeping `dab-downloader` updated. It fetches the latest version and places it in your current directory.
+
+**Direct execution with curl:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/PrathxmOp/Support-group-junk/main/Scripts/auto-dl.sh | bash
+```
+
+**Alternative methods:**
+
+**Using wget (if curl is not available):**
+```bash
+wget -qO- https://raw.githubusercontent.com/PrathxmOp/Support-group-junk/main/Scripts/auto-dl.sh | bash
+```
+
+**Download first, then execute (safer approach):**
+```bash
+curl -fsSL -o auto-dl.sh https://raw.githubusercontent.com/PrathxmOp/Support-group-junk/main/Scripts/auto-dl.sh
+chmod +x auto-dl.sh
+./auto-dl.sh
+```
+
+### Option 2: Pre-built Binary
 
 1. Download the latest release from our [GitHub Releases](https://github.com/PrathxmOp/dab-downloader/releases/latest)
 2. Extract the archive.
@@ -60,7 +83,7 @@
    ```
 5. Follow the interactive setup on first launch
 
-### Option 2: Build from Source
+### Option 3: Build from Source
 
 **Prerequisites:**
 - Go 1.19 or later ([Download here](https://golang.org/dl/))
@@ -75,7 +98,7 @@ go mod tidy
 go build -o dab-downloader
 ```
 
-### Option 3: Docker (Containerized)
+### Option 4: Docker (Containerized)
 
 To run dab-downloader using a pre-built Docker image from Docker Hub:
 
