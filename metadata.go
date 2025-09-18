@@ -118,10 +118,10 @@ func AddMetadata(filePath string, track Track, album *Album, coverData []byte, t
 	}
 
 	// Technical and source information
-	addField(comment, "MUSICBRAINZ_TRACKID", idToString(track.ID))
-	if album != nil && album.ID != "" {
-		addField(comment, "MUSICBRAINZ_ALBUMID", album.ID)
-	}
+	// addField(comment, "MUSICBRAINZ_TRACKID", idToString(track.ID)) // This is wrong
+	// if album != nil && album.ID != "" {
+	// 	addField(comment, "MUSICBRAINZ_ALBUMID", album.ID) // This is wrong
+	// }
 
 	// Fetch and add MusicBrainz metadata if available
 	if track.MusicBrainzID != "" {
@@ -130,7 +130,7 @@ func AddMetadata(filePath string, track Track, album *Album, coverData []byte, t
 			colorWarning.Printf("Warning: Failed to fetch MusicBrainz track metadata for ID %s: %v\n", track.MusicBrainzID, err)
 		} else {
 			// Add more detailed MusicBrainz tags from the fetched data
-			addField(comment, "MUSICBRAINZ_RECORDINGID", mbTrack.ID)
+			addField(comment, "MUSICBRAINZ_TRACKID", mbTrack.ID)
 			if len(mbTrack.ArtistCredit) > 0 {
 				addField(comment, "MUSICBRAINZ_ARTISTID", mbTrack.ArtistCredit[0].Artist.ID)
 			}
@@ -143,7 +143,7 @@ func AddMetadata(filePath string, track Track, album *Album, coverData []byte, t
 		if err != nil {
 			colorWarning.Printf("Warning: Failed to fetch MusicBrainz release metadata for ID %s: %v\n", album.MusicBrainzID, err)
 		} else {
-			addField(comment, "MUSICBRAINZ_RELEASEID", mbRelease.ID)
+			addField(comment, "MUSICBRAINZ_ALBUMID", mbRelease.ID)
 			if len(mbRelease.ArtistCredit) > 0 {
 				addField(comment, "MUSICBRAINZ_ALBUMARTISTID", mbRelease.ArtistCredit[0].Artist.ID)
 			}
