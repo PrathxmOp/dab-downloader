@@ -37,6 +37,7 @@ jobs:
           git-user-email: "github-actions[bot]@users.noreply.github.com"
           version-file: "version/version.json"
           version-path: "version"
+          skip-version-file: 'true' # Skip version file update
           skip-tag: 'true' # Skip tag creation if it already exists
 
       - name: Send Discord Notification
