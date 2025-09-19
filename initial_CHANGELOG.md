@@ -1,8 +1,9 @@
-# [0.3.0](https://github.com/PrathxmOp/dab-downloader/compare/v0.1.0...v0.3.0) (2025-09-19)
+# [0.4.0](https://github.com/PrathxmOp/dab-downloader/compare/v0.1.0...v0.4.0) (2025-09-19)
 
 
 ### Bug Fixes
 
+* escape changelog content for discord json payload ([9778d39](https://github.com/PrathxmOp/dab-downloader/commit/9778d399dab80c023ff3f4c1c70530e4a178cc61))
 * prevent release workflow from failing on existing tags ([429962c](https://github.com/PrathxmOp/dab-downloader/commit/429962c90f237926f702925bd41ae443c76bdd72))
 * resolve tag conflict and use curl for discord notification ([193dd36](https://github.com/PrathxmOp/dab-downloader/commit/193dd3607d1af0ad9fd4363dfb34056ede8bc8e3))
 * send full changelog content to discord ([339acd0](https://github.com/PrathxmOp/dab-downloader/commit/339acd07df9c7a44040dca78910e6cec07938b21))
