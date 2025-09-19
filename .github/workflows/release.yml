@@ -50,8 +50,14 @@ jobs:
       run: |
         git config user.name github-actions
         git config user.email github-actions@github.com
-        git tag ${{ env.VERSION }}
-        git push origin ${{ env.VERSION }}
+        TAG_NAME=${{ env.VERSION }}
+        # Check if tag already exists on remote
+        if ! git ls-remote --tags origin | grep -q "refs/tags/$TAG_NAME"; then
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+        else
+          echo "Tag $TAG_NAME already exists, skipping tag creation and push."
+        fi
 
     - name: Generate Changelog
       id: generate_changelog
