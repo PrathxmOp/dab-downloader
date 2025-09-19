@@ -37,7 +37,7 @@ jobs:
           git-user-email: "github-actions[bot]@users.noreply.github.com"
           version-file: "version/version.json"
           version-path: "version"
-
+          skip-tag: 'true' # Skip tag creation if it already exists
 
       - name: Get Changelog Changes for Discord
         id: changelog_changes
@@ -51,11 +51,12 @@ jobs:
       - name: Send Discord Notification
         # Only send notification if there are actual changes in the changelog
         if: steps.changelog_changes.outputs.diff != ''
-        uses: discord-webhook-action/discord-webhook-action@v3
-        with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          content: |
-            📜 **Changelog Updated**
-            ```diff
-            ${{ steps.changelog_changes.outputs.diff }}
-            ```
+        run: |
+          WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}"
+          MESSAGE=$(cat <<EOF
+            {
+              "content": "📜 **Changelog Updated**\n```diff\n${{ steps.changelog_changes.outputs.diff }}\n```"
+            }
+          EOF
+          )
+          curl -H "Content-Type: application/json" -X POST -d "$MESSAGE" "$WEBHOOK_URL"
