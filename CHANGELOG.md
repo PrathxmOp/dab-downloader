@@ -1,4 +1,4 @@
-# [0.6.0](https://github.com/PrathxmOp/dab-downloader/compare/v0.1.0...v0.6.0) (2025-09-19)
+# [0.2.0](https://github.com/PrathxmOp/dab-downloader/compare/v0.1.0...v0.2.0) (2025-09-19)
 
 
 ### Bug Fixes
