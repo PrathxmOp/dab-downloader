@@ -1,4 +1,19 @@
-# 0.1.0 (2025-09-19)
+# [0.2.0](https://github.com/PrathxmOp/dab-downloader/compare/v0.1.0...v0.2.0) (2025-09-19)
+
+
+### Bug Fixes
+
+* resolve tag conflict and use curl for discord notification ([193dd36](https://github.com/PrathxmOp/dab-downloader/commit/193dd3607d1af0ad9fd4363dfb34056ede8bc8e3))
+* use robust discord-webhook-action ([7847500](https://github.com/PrathxmOp/dab-downloader/commit/78475005ddad99cf587c0f08848dac8a0d2c2580))
+
+
+### Features
+
+* combine changelog and discord notification workflows ([667c058](https://github.com/PrathxmOp/dab-downloader/commit/667c058347d7a8b6372b730ab15a4e71a3a6eb21))
+
+
+
+# [0.1.0](https://github.com/PrathxmOp/dab-downloader/compare/b4347d51ec6dca6c0b15b8f610257630fd6f504d...v0.1.0) (2025-09-19)
 
 
 ### Bug Fixes
