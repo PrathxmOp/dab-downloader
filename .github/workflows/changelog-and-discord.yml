@@ -37,7 +37,7 @@ jobs:
           git-user-email: "github-actions[bot]@users.noreply.github.com"
           version-file: "version/version.json"
           version-path: "version"
-          skip-version-file: 'true' # Correct input to skip version bumping
+
 
       - name: Get Changelog Changes for Discord
         id: changelog_changes
