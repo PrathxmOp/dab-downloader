@@ -27,7 +27,7 @@ jobs:
 
       - name: Send Discord Notification
         if: steps.changelog_changes.outputs.diff != ''
-        uses: tsg-ext/discord-webhook-action@v1
+        uses: naveto/discord-webhook-action@v1
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           message: |
