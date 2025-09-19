@@ -1,0 +1,61 @@
+name: Changelog and Discord Notification
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update_and_notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Grant write permissions to push back to the repo
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Need full history for changelog generation
+
+      # Store the initial state of CHANGELOG.md
+      - name: Store initial CHANGELOG.md
+        id: initial_changelog
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            cat CHANGELOG.md > initial_CHANGELOG.md
+          else
+            touch initial_CHANGELOG.md
+          fi
+
+      - name: Conventional Changelog Action
+        id: changelog
+        uses: TriPSs/conventional-changelog-action@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          output-file: "CHANGELOG.md"
+          git-message: "chore: update changelog"
+          git-user-name: "github-actions[bot]"
+          git-user-email: "github-actions[bot]@users.noreply.github.com"
+          version-file: "version/version.json"
+          version-path: "version"
+          skip-version-file: 'true' # Correct input to skip version bumping
+
+      - name: Get Changelog Changes for Discord
+        id: changelog_changes
+        # Only run this step if the changelog action actually made changes
+        if: steps.changelog.outputs.changelog != ''
+        run: |
+          # Compare the current CHANGELOG.md with the initial one
+          CHANGES=$(diff -u initial_CHANGELOG.md CHANGELOG.md) || true
+          echo "::set-output name=diff::$CHANGES"
+
+      - name: Send Discord Notification
+        # Only send notification if there are actual changes in the changelog
+        if: steps.changelog_changes.outputs.diff != ''
+        uses: naveto/discord-webhook-action@v1
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          message: |
+            📜 **Changelog Updated**
+            ```diff
+            ${{ steps.changelog_changes.outputs.diff }}
+            ```
