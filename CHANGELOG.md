@@ -1,4 +1,4 @@
-# [0.5.0](https://github.com/PrathxmOp/dab-downloader/compare/v0.1.0...v0.5.0) (2025-09-19)
+# [0.6.0](https://github.com/PrathxmOp/dab-downloader/compare/v0.1.0...v0.6.0) (2025-09-19)
 
 
 ### Bug Fixes
@@ -14,6 +14,7 @@
 ### Features
 
 * combine changelog and discord notification workflows ([667c058](https://github.com/PrathxmOp/dab-downloader/commit/667c058347d7a8b6372b730ab15a4e71a3a6eb21))
+* orchestrate release workflow from changelog workflow ([2f3c742](https://github.com/PrathxmOp/dab-downloader/commit/2f3c742ee66c0c165cc8e39b8af2909d83fcb9c6))
 
 
 
