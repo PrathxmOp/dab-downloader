@@ -51,10 +51,10 @@ jobs:
       - name: Send Discord Notification
         # Only send notification if there are actual changes in the changelog
         if: steps.changelog_changes.outputs.diff != ''
-        uses: naveto/discord-webhook-action@v1
+        uses: discord-webhook-action/discord-webhook-action@v3
         with:
-          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          message: |
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          content: |
             📜 **Changelog Updated**
             ```diff
             ${{ steps.changelog_changes.outputs.diff }}
