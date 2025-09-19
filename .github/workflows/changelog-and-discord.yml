@@ -51,3 +51,13 @@ jobs:
             '{content: $content}'\
           )
           curl -v -H "Content-Type: application/json" -X POST -d "$JSON_PAYLOAD" "$WEBHOOK_URL"
+
+      - name: Trigger Release Workflow
+        # Only trigger if the changelog action actually made changes and a new version was determined
+        if: steps.changelog.outputs.new_version != ''
+        run: |
+          curl -X POST \
+          -H "Accept: application/vnd.github.v3+json" \
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          https://api.github.com/repos/${{ github.repository }}/actions/workflows/release.yml/dispatches \
+          -d '{"ref":"main","inputs":{"version":"${{ steps.changelog.outputs.new_version }}"}}'

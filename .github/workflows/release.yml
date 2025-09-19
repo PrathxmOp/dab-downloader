@@ -1,26 +1,27 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+        type: string
 
 jobs:
   build:
     name: Build and Release
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Grant write permissions for GITHUB_TOKEN to create releases and upload assets
+      contents: write
     outputs:
-      tag_name: ${{ env.VERSION }} # Output the version from version.json
+      tag_name: ${{ github.event.inputs.version }} # Use the version from workflow_dispatch
     steps:
     - uses: actions/checkout@v3
 
-    - name: Get version from version.json
-      id: get_version
+    - name: Get version from workflow_dispatch input
       run: |
-        VERSION=$(cat version/version.json | jq -r '.version')
-        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
 
     - name: Set up Go
       uses: actions/setup-go@v4
