@@ -1,0 +1,37 @@
+name: Notify Discord of Changelog Update
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'CHANGELOG.md'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+
+      - name: Get changelog changes
+        id: changelog_changes
+        run: |
+          # Get the diff of the CHANGELOG.md file from the last commit
+          # and store it in an output variable.
+          # The `|| true` is to prevent the workflow from failing if there's no diff.
+          CHANGES=$(git diff HEAD~1 HEAD -- CHANGELOG.md) || true
+          echo "::set-output name=diff::$CHANGES"
+
+      - name: Send Discord Notification
+        if: steps.changelog_changes.outputs.diff != ''
+        uses: tsg-ext/discord-webhook-action@v1
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          message: |
+            📜 **Changelog Updated**
+            ```diff
+            ${{ steps.changelog_changes.outputs.diff }}
+            ```
