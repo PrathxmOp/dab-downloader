@@ -265,6 +265,7 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 
 			// Skip if already exists
 			if FileExists(trackPath) {
+				colorWarning.Printf("⭐ Track already exists: %s\n", trackPath)
 				stats.SkippedCount++
 				return
 			}

@@ -429,7 +429,7 @@ var navidromeCmd = &cobra.Command{
 
 			if track != nil {
 				navidromeTrackIDs = append(navidromeTrackIDs, track.ID) // Collect track IDs
-				colorSuccess.Printf("✅ Found track %s by %s on Navidrome (ID: %s)\n", spotifyTrack.Name, spotifyTrack.Artist, track.ID)
+				colorSuccess.Println("track is already found skipping")
 			} else {
 				colorWarning.Printf("⚠️ Track %s by %s not found on Navidrome. Searching DAB...\n", spotifyTrack.Name, spotifyTrack.Artist)
 
