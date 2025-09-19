@@ -43,11 +43,14 @@ jobs:
         # Only send notification if the changelog action actually made changes
         if: steps.changelog.outputs.changelog != ''
         run: |
+          set -x # Enable debugging
           WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}"
+          # Escape the changelog content for JSON
+          ESCAPED_CHANGELOG=$(echo "${{ steps.changelog.outputs.changelog }}" | jq -Rs .)
           MESSAGE=$(cat <<EOF
             {
-              "content": "📜 **Changelog Updated**\n${{ steps.changelog.outputs.changelog }}"
+              "content": "📜 **Changelog Updated**\n${ESCAPED_CHANGELOG}"
             }
           EOF
           )
-          curl -H "Content-Type: application/json" -X POST -d "$MESSAGE" "$WEBHOOK_URL"
+          curl -v -H "Content-Type: application/json" -X POST -d "$MESSAGE" "$WEBHOOK_URL"
