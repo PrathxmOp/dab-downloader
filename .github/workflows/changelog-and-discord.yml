@@ -45,12 +45,9 @@ jobs:
         run: |
           set -x # Enable debugging
           WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}"
-          # Escape the changelog content for JSON
-          ESCAPED_CHANGELOG=$(echo "${{ steps.changelog.outputs.changelog }}" | jq -Rs .)
-          MESSAGE=$(cat <<EOF
-            {
-              "content": "📜 **Changelog Updated**\n${ESCAPED_CHANGELOG}"
-            }
-          EOF
+          # Construct the JSON payload using jq
+          JSON_PAYLOAD=$(jq -n \
+            --arg content "📜 **Changelog Updated**\n${{ steps.changelog.outputs.changelog }}" \
+            '{content: $content}'\
           )
-          curl -v -H "Content-Type: application/json" -X POST -d "$MESSAGE" "$WEBHOOK_URL"
+          curl -v -H "Content-Type: application/json" -X POST -d "$JSON_PAYLOAD" "$WEBHOOK_URL"
