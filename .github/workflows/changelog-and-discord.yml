@@ -31,7 +31,9 @@ jobs:
         uses: TriPSs/conventional-changelog-action@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file: "CHANGELOG.md"
+          output-file: 'false'
+          skip-on-empty: 'false'
+          tag-prefix: ''
           git-message: "chore: update changelog"
           git-user-name: "github-actions[bot]"
           git-user-email: "github-actions[bot]@users.noreply.github.com"
