@@ -728,6 +728,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&navidromePassword, "navidrome-password", "", "Navidrome Password")
 	navidromeCmd.Flags().StringVar(&ignoreSuffix, "ignore-suffix", "", "Ignore suffix when searching for tracks")
 	navidromeCmd.Flags().BoolVar(&expandNavidrome, "expand", false, "Expand playlist tracks to download the full albums")
+	navidromeCmd.Flags().BoolVar(&auto, "auto", false, "Automatically download the first result")
 
 	rootCmd.AddCommand(artistCmd)
 	rootCmd.AddCommand(albumCmd)
