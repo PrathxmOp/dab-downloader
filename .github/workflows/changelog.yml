@@ -27,3 +27,4 @@ jobs:
           git-user-email: "github-actions[bot]@users.noreply.github.com"
           version-file: "version/version.json"
           version-path: "version"
+          skip-version-bump: 'true'
