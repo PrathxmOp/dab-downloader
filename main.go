@@ -421,7 +421,7 @@ var navidromeCmd = &cobra.Command{
 			if ignoreSuffix != "" {
 				trackName = removeSuffix(trackName, ignoreSuffix)
 			}
-			track, err := navidromeClient.SearchTrack(trackName, spotifyTrack.Artist) // Pass name and artist separately
+			track, err := navidromeClient.SearchTrack(trackName, spotifyTrack.Artist, spotifyTrack.AlbumName)
 			if err != nil {
 				colorWarning.Printf("⚠️ Error searching for track %s by %s on Navidrome: %v\n", spotifyTrack.Name, spotifyTrack.Artist, err)
 				continue
@@ -459,7 +459,7 @@ var navidromeCmd = &cobra.Command{
 							// After downloading, try to search for it in Navidrome again and add to playlist
 							// This might require a small delay for Navidrome to scan the new file
 							time.Sleep(5 * time.Second) // Give Navidrome some time to scan
-							reScannedTrack, err := navidromeClient.SearchTrack(dabTrack.Title, dabTrack.Artist)
+							reScannedTrack, err := navidromeClient.SearchTrack(dabTrack.Title, dabTrack.Artist, dabTrack.Album)
 							if err != nil {
 								colorWarning.Printf("⚠️ Failed to re-search for downloaded track %s in Navidrome: %v\n", dabTrack.Title, err)
 							} else if reScannedTrack != nil {

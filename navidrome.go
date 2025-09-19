@@ -78,9 +78,33 @@ func (n *NavidromeClient) Authenticate() error {
 }
 
 // SearchTrack searches for a track on the navidrome server
-func (n *NavidromeClient) SearchTrack(trackName string, artistName string) (*subsonic.Child, error) {
-	log.Printf("Searching Navidrome for Track: %s, Artist: %s", trackName, artistName)
+func (n *NavidromeClient) SearchTrack(trackName, artistName, albumName string) (*subsonic.Child, error) {
+	log.Printf("Searching Navidrome for Track: %s, Artist: %s, Album: %s", trackName, artistName, albumName)
 
+	// First, search for the album
+	album, err := n.SearchAlbum(albumName, artistName)
+	if err != nil {
+		log.Printf("Error searching for album '%s' by '%s': %v", albumName, artistName, err)
+		// Continue to track-based search as a fallback
+	}
+
+	if album != nil {
+		// Album found, now get the tracks of the album
+		albumData, err := n.Client.GetAlbum(album.ID)
+		if err != nil {
+			log.Printf("Error getting album details for '%s': %v", albumName, err)
+		} else {
+			for _, song := range albumData.Song {
+				if strings.EqualFold(song.Title, trackName) {
+					log.Printf("Found exact track match in album: %s by %s (ID: %s)", song.Title, song.Artist, song.ID)
+					return song, nil
+				}
+			}
+		}
+	}
+
+	// Fallback to original search logic if album search is not conclusive
+	log.Printf("Fallback: Searching for track directly.")
 	// Try searching with track name and artist name combined first
 	combinedQuery := fmt.Sprintf("%s %s", trackName, artistName)
 	log.Printf("Trying combined query first: '%s'", combinedQuery)
@@ -126,6 +150,33 @@ func (n *NavidromeClient) SearchTrack(trackName string, artistName string) (*sub
 
 	log.Printf("Track '%s' by '%s' not found after all attempts.", trackName, artistName)
 	return nil, nil
+}
+
+// SearchAlbum searches for an album on the navidrome server
+func (n *NavidromeClient) SearchAlbum(albumName string, artistName string) (*subsonic.Child, error) {
+	log.Printf("Searching Navidrome for Album: %s, Artist: %s", albumName, artistName)
+
+	// Search for the album by name
+	searchResult, err := n.Client.Search2(albumName, map[string]string{"albumCount": "5"})
+	if err != nil {
+		return nil, fmt.Errorf("error searching for album '%s': %w", albumName, err)
+	}
+
+	if searchResult != nil && len(searchResult.Album) > 0 {
+		log.Printf("Found %d albums for query '%s'", len(searchResult.Album), albumName)
+		for _, album := range searchResult.Album {
+			log.Printf("  Checking album: %s by %s (ID: %s)", album.Title, album.Artist, album.ID)
+			if strings.EqualFold(album.Title, albumName) && strings.EqualFold(album.Artist, artistName) {
+				log.Printf("  Found exact album match: %s by %s (ID: %s)", album.Title, album.Artist, album.ID)
+				return album, nil
+			}
+		}
+		log.Printf("No exact album match found for '%s' by '%s'.", albumName, artistName)
+	} else {
+		log.Printf("No albums found for query '%s'", albumName)
+	}
+
+	return nil, nil // Album not found
 }
 
 // CreatePlaylist creates a new playlist on the navidrome server
