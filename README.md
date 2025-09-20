@@ -268,7 +268,8 @@ An example configuration is available at `config/example-config.json`.
   "NavidromeUsername": "your_navidrome_username",
   "NavidromePassword": "your_navidrome_password",
   "Format": "flac",
-  "Bitrate": "320"
+  "Bitrate": "320",
+  "saveAlbumArt": false,
 }
 ```
 
