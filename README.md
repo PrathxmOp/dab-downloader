@@ -80,11 +80,12 @@
 📦 **Complete Discographies** - Download entire artist catalogs with automatic categorization  
 🏷️ **Rich Metadata** - Full tag support including genre, composer, producer, ISRC, and copyright  
 🎨 **High-Quality Artwork** - Embedded album covers in original resolution  
-⚡ **Concurrent Downloads** - Fast parallel processing with real-time progress tracking  
-🔄 **Intelligent Retry Logic** - Robust error handling for reliable downloads  
-🎧 **Spotify Integration** - Import and download entire Spotify playlists and albums  
-🎵 **Format Conversion** - Convert downloaded FLAC files to MP3, OGG, Opus with configurable bitrates (requires FFmpeg)  
-📊 **Navidrome Support** - Seamless integration with your music server  
+- **Concurrent Downloads** - Fast parallel processing with real-time progress tracking  
+- **Intelligent Retry Logic** - Robust error handling for reliable downloads  
+- **Spotify Integration** - Import and download entire Spotify playlists and albums  
+- **Format Conversion** - Convert downloaded FLAC files to MP3, OGG, Opus with configurable bitrates (requires FFmpeg)  
+- **Navidrome Support** - Seamless integration with your music server  
+- **Customizable Naming** - Define your own file and folder structure with configurable naming masks
 
 ## 📸 Screenshots
 
@@ -294,7 +295,7 @@ For Docker users, pull the latest image from Docker Hub:
 
 The application will guide you through initial configuration:
 
-1. **DAB API URL** (e.g., `https://dab.yeet.su`)
+1. **DAB API URL** (e.g., `https://dabmusic.xyz`)
 2. **Download Directory** (e.g., `/home/user/Music`)
 3. **Concurrent Downloads** (recommended: `5`)
 
@@ -315,7 +316,14 @@ An example configuration is available at `config/example-config.json`.
   "NavidromeUsername": "your_navidrome_username",
   "NavidromePassword": "your_navidrome_password",
   "Format": "flac",
-  "Bitrate": "320"
+  "Bitrate": "320",
+  "saveAlbumArt": false,
+  "naming": {
+    "album_folder_mask": "{artist}/{artist} - {album} ({year})",
+    "ep_folder_mask": "{artist}/EPs/{artist} - {album} ({year})",
+    "single_folder_mask": "{artist}/Singles/{artist} - {album} ({year})",
+    "file_mask": "{track_number} - {artist} - {title}"
+  }
 }
 ```
 
@@ -397,6 +405,11 @@ These flags are only available for their respective commands.
 -   `--auto`: Automatically selects the first matching DAB result when searching for tracks to add to Navidrome, without prompting.
     -   **Example:** `dab-downloader navidrome <spotify_url> --auto`
 
+#### `add-to-playlist` command
+
+-   This command takes a playlist ID and one or more song IDs as arguments.
+    -   **Example:** `dab-downloader add-to-playlist <playlist_id> <song_id_1> <song_id_2>`
+
 
 ## 📁 File Organization
 
@@ -415,6 +428,8 @@ Music/
 │   └── Singles/
 │       └── I Bet You Look Good on the Dancefloor.flac
 ```
+
+**Note:** You can customize this structure using the `naming` masks in your `config/config.json` file.
 
 ## 🔧 Advanced Features
 

@@ -596,7 +596,7 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 	}
 
 	config := &Config{
-		APIURL:           "https://dab.yeet.su",
+		APIURL:           "https://dabmusic.xyz",
 		DownloadLocation: filepath.Join(homeDir, "Music"),
 		Parallelism:      5,
 		UpdateRepo:       "PrathxmOp/dab-downloader", // Default value
