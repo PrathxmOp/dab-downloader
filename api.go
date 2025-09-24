@@ -18,13 +18,11 @@ import (
 const requestInterval = 500 * time.Millisecond // Define rate limit interval
 
 // NewDabAPI creates a new API client
-func NewDabAPI(endpoint, outputLocation string) *DabAPI {
+func NewDabAPI(endpoint, outputLocation string, client *http.Client) *DabAPI {
 	return &DabAPI{
 		endpoint:       strings.TrimSuffix(endpoint, "/"),
 		outputLocation: outputLocation,
-		client: &http.Client{
-			Timeout: requestTimeout,
-		},
+		client:         client,
 		rateLimiter:    time.NewTicker(requestInterval), // Initialize rate limiter
 	}
 }

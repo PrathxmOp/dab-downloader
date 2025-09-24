@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"crypto/tls"
+	"net/http"
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/fatih/color"
@@ -42,6 +44,7 @@ var (
 	format              string = "flac"
 	bitrate             string = "320"
 	ignoreSuffix      string
+	insecure            bool
 )
 
 var rootCmd = &cobra.Command{
@@ -693,7 +696,18 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 		config.Bitrate = bitrate
 	}
 
-	api := NewDabAPI(config.APIURL, config.DownloadLocation)
+	// Create a new http.Client
+	client := &http.Client{
+		Timeout: requestTimeout,
+	}
+
+	if insecure {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
+	api := NewDabAPI(config.APIURL, config.DownloadLocation, client)
 	return config, api
 }
 
@@ -701,6 +715,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&apiURL, "api-url", "", "DAB API URL")
 	rootCmd.PersistentFlags().StringVar(&downloadLocation, "download-location", "", "Directory to save downloads")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging")
+	rootCmd.PersistentFlags().BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification")
 
 	albumCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to after downloading (e.g., mp3, ogg, opus)")
 	albumCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats (in kbps, e.g., 192, 256, 320)")
