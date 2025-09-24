@@ -29,6 +29,15 @@ type Config struct {
 	DisableUpdateCheck  bool `json:"DisableUpdateCheck"`
 	IsDockerContainer   bool `json:"-"` // Not saved to config.json
 	UpdateRepo          string `json:"UpdateRepo"`
+	NamingMasks         NamingOptions `json:"naming"`
+}
+
+// NamingOptions defines the configurable naming masks
+	ype NamingOptions struct {
+	AlbumFolderMask  string `json:"album_folder_mask"`
+	EpFolderMask     string `json:"ep_folder_mask"`
+	SingleFolderMask string `json:"single_folder_mask"`
+	FileMask         string `json:"file_mask"`
 }
 
 // VersionInfo represents the structure of our version.json file

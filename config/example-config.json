@@ -9,5 +9,11 @@
   "NavidromePassword": "your_navidrome_password",
   "Format": "flac",
   "Bitrate": "320",
-  "saveAlbumArt": false
+  "saveAlbumArt": false,
+  "naming": {
+    "album_folder_mask": "{artist}/{artist} - {album} ({year})",
+    "ep_folder_mask": "{artist}/EPs/{artist} - {album} ({year})",
+    "single_folder_mask": "{artist}/Singles/{artist} - {album} ({year})",
+    "file_mask": "{track_number} - {artist} - {title}"
+  }
 }
