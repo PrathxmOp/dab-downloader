@@ -123,38 +123,29 @@ func AddMetadata(filePath string, track Track, album *Album, coverData []byte, t
 	// 	addField(comment, "MUSICBRAINZ_ALBUMID", album.ID) // This is wrong
 	// }
 
-	// Fetch and add MusicBrainz metadata if available
-	if track.MusicBrainzID != "" {
-		mbTrack, err := mbClient.GetTrackMetadata(track.MusicBrainzID)
-		if err != nil {
-			colorWarning.Printf("Warning: Failed to fetch MusicBrainz track metadata for ID %s: %v\n", track.MusicBrainzID, err)
-		} else {
-			// Add more detailed MusicBrainz tags from the fetched data
-			addField(comment, "MUSICBRAINZ_TRACKID", mbTrack.ID)
-			if len(mbTrack.ArtistCredit) > 0 {
-				addField(comment, "MUSICBRAINZ_ARTISTID", mbTrack.ArtistCredit[0].Artist.ID)
-			}
-			// Add other relevant fields from mbTrack as needed
+	// Fetch and add MusicBrainz metadata
+	mbTrack, err := mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
+	if err != nil {
+		colorWarning.Printf("Warning: Failed to find MusicBrainz track for %s - %s: %v\n", track.Artist, track.Title, err)
+	} else {
+		addField(comment, "MUSICBRAINZ_TRACKID", mbTrack.ID)
+		if len(mbTrack.ArtistCredit) > 0 {
+			addField(comment, "MUSICBRAINZ_ARTISTID", mbTrack.ArtistCredit[0].Artist.ID)
 		}
 	}
 
-	if album != nil && album.MusicBrainzID != "" {
-		mbRelease, err := mbClient.GetReleaseMetadata(album.MusicBrainzID)
+	if album != nil {
+		mbRelease, err := mbClient.SearchRelease(album.Artist, album.Title)
 		if err != nil {
-			colorWarning.Printf("Warning: Failed to fetch MusicBrainz release metadata for ID %s: %v\n", album.MusicBrainzID, err)
+			colorWarning.Printf("Warning: Failed to find MusicBrainz release for %s - %s: %v\n", album.Artist, album.Title, err)
 		} else {
 			addField(comment, "MUSICBRAINZ_ALBUMID", mbRelease.ID)
 			if len(mbRelease.ArtistCredit) > 0 {
 				addField(comment, "MUSICBRAINZ_ALBUMARTISTID", mbRelease.ArtistCredit[0].Artist.ID)
 			}
-			if mbRelease.Barcode != "" {
-				addField(comment, "BARCODE", mbRelease.Barcode)
+			if mbRelease.ReleaseGroup.ID != "" {
+				addField(comment, "MUSICBRAINZ_RELEASEGROUPID", mbRelease.ReleaseGroup.ID)
 			}
-			if len(mbRelease.LabelInfo) > 0 && mbRelease.LabelInfo[0].CatalogNumber != "" {
-				addField(comment, "CATALOGNUMBER", mbRelease.LabelInfo[0].CatalogNumber)
-				addField(comment, "LABEL", mbRelease.LabelInfo[0].Label.Name)
-			}
-			// Add other relevant fields from mbRelease as needed
 		}
 	}
 

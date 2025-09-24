@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"time"
 )
 
 const (
-	musicBrainzAPI = "https://musicbrainz.org/ws/2/"
+	musicBrainzAPI       = "https://musicbrainz.org/ws/2/"
 	musicBrainzUserAgent = "dab-downloader/2.0 ( prathxm.in@gmail.com )" // Replace with your actual email or project contact
 )
 
@@ -29,7 +30,7 @@ func NewMusicBrainzClient() *MusicBrainzClient {
 
 // get makes a GET request to the MusicBrainz API
 func (mb *MusicBrainzClient) get(path string) ([]byte, error) {
-	req, err := http.NewRequest("GET", musicBrainzAPI + path, nil)
+	req, err := http.NewRequest("GET", musicBrainzAPI+path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -70,7 +71,7 @@ func (mb *MusicBrainzClient) GetTrackMetadata(mbid string) (*MusicBrainzTrack, e
 
 // GetReleaseMetadata fetches release (album) metadata from MusicBrainz by MBID
 func (mb *MusicBrainzClient) GetReleaseMetadata(mbid string) (*MusicBrainzRelease, error) {
-	path := fmt.Sprintf("release/%s?inc=artists+labels+recordings+url-rels", mbid)
+	path := fmt.Sprintf("release/%s?inc=artists+labels+recordings+url-rels+release-groups", mbid)
 	body, err := mb.get(path)
 	if err != nil {
 		return nil, err
@@ -83,10 +84,56 @@ func (mb *MusicBrainzClient) GetReleaseMetadata(mbid string) (*MusicBrainzReleas
 	return &release, nil
 }
 
+// SearchTrack searches for a track on MusicBrainz
+func (mb *MusicBrainzClient) SearchTrack(artist, album, title string) (*MusicBrainzTrack, error) {
+	query := fmt.Sprintf("artist:"%s" AND release:"%s" AND recording:"%s"", artist, album, title)
+	path := fmt.Sprintf("recording?query=%s&limit=1", url.QueryEscape(query))
+	body, err := mb.get(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var searchResult struct {
+		Recordings []MusicBrainzTrack `json:"recordings"`
+	}
+	if err := json.Unmarshal(body, &searchResult); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal MusicBrainz track search result: %w", err)
+	}
+
+	if len(searchResult.Recordings) > 0 {
+		return &searchResult.Recordings[0], nil
+	}
+
+	return nil, fmt.Errorf("no track found on MusicBrainz for: %s - %s - %s", artist, album, title)
+}
+
+// SearchRelease searches for a release on MusicBrainz
+func (mb *MusicBrainzClient) SearchRelease(artist, album string) (*MusicBrainzRelease, error) {
+	query := fmt.Sprintf("artist:"%s" AND release:"%s"", artist, album)
+	path := fmt.Sprintf("release?query=%s&limit=1", url.QueryEscape(query))
+	body, err := mb.get(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var searchResult struct {
+		Releases []MusicBrainzRelease `json:"releases"`
+	}
+	if err := json.Unmarshal(body, &searchResult); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal MusicBrainz release search result: %w", err)
+	}
+
+	if len(searchResult.Releases) > 0 {
+		return &searchResult.Releases[0], nil
+	}
+
+	return nil, fmt.Errorf("no release found on MusicBrainz for: %s - %s", artist, album)
+}
+
 // MusicBrainzTrack represents a simplified MusicBrainz recording (track)
 type MusicBrainzTrack struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
+	ID           string `json:"id"`
+	Title        string `json:"title"`
 	ArtistCredit []struct {
 		Artist struct {
 			ID   string `json:"id"`
@@ -103,10 +150,10 @@ type MusicBrainzTrack struct {
 				ID string `json:"id"`
 			} `json:"discs"`
 			Tracks []struct {
-				ID string `json:"id"`
+				ID     string `json:"id"`
 				Number string `json:"number"`
-				Title string `json:"title"`
-				Length int `json:"length"`
+				Title  string `json:"title"`
+				Length int    `json:"length"`
 			} `json:"tracks"`
 		} `json:"media"`
 	} `json:"releases"`
@@ -115,11 +162,11 @@ type MusicBrainzTrack struct {
 
 // MusicBrainzRelease represents a simplified MusicBrainz release (album)
 type MusicBrainzRelease struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Status  string `json:"status"`
-	Date    string `json:"date"`
-	Country string `json:"country"`
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	Status       string `json:"status"`
+	Date         string `json:"date"`
+	Country      string `json:"country"`
 	ArtistCredit []struct {
 		Artist struct {
 			ID   string `json:"id"`
@@ -128,7 +175,7 @@ type MusicBrainzRelease struct {
 	} `json:"artist-credit"`
 	LabelInfo []struct {
 		CatalogNumber string `json:"catalog-number"`
-		Label struct {
+		Label         struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
 		} `json:"label"`
@@ -139,17 +186,22 @@ type MusicBrainzRelease struct {
 			ID string `json:"id"`
 		} `json:"discs"`
 		Tracks []struct {
-			ID string `json:"id"`
+			ID     string `json:"id"`
 			Number string `json:"number"`
-			Title string `json:"title"`
-			Length int `json:"length"`
+			Title  string `json:"title"`
+			Length int    `json:"length"`
 		} `json:"tracks"`
 	} `json:"media"`
 	TextRepresentation struct {
 		Language string `json:"language"`
 		Script   string `json:"script"`
 	} `json:"text-representation"`
-	Packaging string `json:"packaging"`
-	Barcode   string `json:"barcode"`
+	Packaging    string         `json:"packaging"`
+	Barcode      string         `json:"barcode"`
+	ReleaseGroup ReleaseGroup `json:"release-group"`
 	// Add other fields as needed
+}
+
+type ReleaseGroup struct {
+	ID string `json:"id"`
 }
