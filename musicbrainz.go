@@ -86,7 +86,7 @@ func (mb *MusicBrainzClient) GetReleaseMetadata(mbid string) (*MusicBrainzReleas
 
 // SearchTrack searches for a track on MusicBrainz
 func (mb *MusicBrainzClient) SearchTrack(artist, album, title string) (*MusicBrainzTrack, error) {
-	query := fmt.Sprintf("artist:"%s" AND release:"%s" AND recording:"%s"", artist, album, title)
+	query := fmt.Sprintf("artist:\"%s\" AND release:\"%s\" AND recording:\"%s\"", artist, album, title)
 	path := fmt.Sprintf("recording?query=%s&limit=1", url.QueryEscape(query))
 	body, err := mb.get(path)
 	if err != nil {
@@ -109,7 +109,7 @@ func (mb *MusicBrainzClient) SearchTrack(artist, album, title string) (*MusicBra
 
 // SearchRelease searches for a release on MusicBrainz
 func (mb *MusicBrainzClient) SearchRelease(artist, album string) (*MusicBrainzRelease, error) {
-	query := fmt.Sprintf("artist:"%s" AND release:"%s"", artist, album)
+	query := fmt.Sprintf("artist:\"%s\" AND release:\"%s\"", artist, album)
 	path := fmt.Sprintf("release?query=%s&limit=1", url.QueryEscape(query))
 	body, err := mb.get(path)
 	if err != nil {

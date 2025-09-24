@@ -33,7 +33,7 @@ type Config struct {
 }
 
 // NamingOptions defines the configurable naming masks
-	ype NamingOptions struct {
+type NamingOptions struct {
 	AlbumFolderMask  string `json:"album_folder_mask"`
 	EpFolderMask     string `json:"ep_folder_mask"`
 	SingleFolderMask string `json:"single_folder_mask"`
