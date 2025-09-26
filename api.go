@@ -63,7 +63,7 @@ func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, pa
 	}
 
 	var resp *http.Response
-	err = RetryWithBackoff(maxRetries, 1, func() error {
+	err = RetryWithBackoff(defaultMaxRetries, 1, func() error {
 		req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 		if err != nil {
 			return fmt.Errorf("error creating request: %w", err)
@@ -317,7 +317,7 @@ func (api *DabAPI) GetTrack(ctx context.Context, trackID string) (*Track, error)
 // GetStreamURL retrieves the stream URL for a track
 func (api *DabAPI) GetStreamURL(ctx context.Context, trackID string) (string, error) {
 	var streamURL StreamURL
-	err := RetryWithBackoff(maxRetries, 1, func() error {
+	err := RetryWithBackoff(defaultMaxRetries, 1, func() error {
 		resp, err := api.Request(ctx, "api/stream", true, []QueryParam{
 			{Name: "trackId", Value: trackID},
 			{Name: "quality", Value: "27"}, // Highest quality FLAC
@@ -342,7 +342,7 @@ func (api *DabAPI) GetStreamURL(ctx context.Context, trackID string) (string, er
 // DownloadCover downloads cover art
 func (api *DabAPI) DownloadCover(ctx context.Context, coverURL string) ([]byte, error) {
 	var coverData []byte
-	err := RetryWithBackoff(maxRetries, 1, func() error {
+	err := RetryWithBackoff(defaultMaxRetries, 1, func() error {
 		resp, err := api.Request(ctx, coverURL, false, nil)
 		if err != nil {
 			return err

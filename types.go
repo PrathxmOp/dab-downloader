@@ -8,9 +8,9 @@ import (
 
 // Add these constants to types.go or create constants.go
 const (
-	requestTimeout = 10 * time.Minute
-	userAgent      = "DAB-Downloader/2.0"
-	maxRetries     = 3
+	requestTimeout    = 10 * time.Minute
+	userAgent         = "DAB-Downloader/2.0"
+	defaultMaxRetries = 3
 )
 
 // Configuration structure
@@ -30,6 +30,8 @@ type Config struct {
 	IsDockerContainer   bool `json:"-"` // Not saved to config.json
 	UpdateRepo          string `json:"UpdateRepo"`
 	NamingMasks         NamingOptions `json:"naming"`
+	VerifyDownloads     bool `json:"VerifyDownloads"` // Enable/disable download verification
+	MaxRetryAttempts    int  `json:"MaxRetryAttempts"` // Configurable retry attempts
 }
 
 // NamingOptions defines the configurable naming masks

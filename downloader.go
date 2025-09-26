@@ -13,11 +13,19 @@ import (
 )
 
 // DownloadTrack downloads a single track with metadata
-func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album, outputPath string, coverData []byte, bar *pb.ProgressBar, debug bool, format string, bitrate string) (string, error) {
+func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album, outputPath string, coverData []byte, bar *pb.ProgressBar, debug bool, format string, bitrate string, config *Config) (string, error) {
 	// Get stream URL
 	streamURL, err := api.GetStreamURL(ctx, idToString(track.ID))
 	if err != nil {
 		return "", fmt.Errorf("failed to get stream URL: %w", err)
+	}
+
+	var expectedFileSize int64 // Store expected size for final verification
+
+	// Determine retry attempts
+	maxRetries := defaultMaxRetries
+	if config != nil && config.MaxRetryAttempts > 0 {
+		maxRetries = config.MaxRetryAttempts
 	}
 
 	// Download the audio file
@@ -27,6 +35,12 @@ func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album,
 			return fmt.Errorf("failed to download audio: %w", err)
 		}
 		defer audioResp.Body.Close()
+
+		expectedSize := audioResp.ContentLength
+		expectedFileSize = expectedSize // Store for final verification
+		if debug && expectedSize > 0 {
+			fmt.Printf("DEBUG: Expected file size for %s: %d bytes\n", track.Title, expectedSize)
+		}
 
 		// Wrap the response body in the progress bar reader
 		if bar != nil {
@@ -53,16 +67,48 @@ func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album,
 		}
 		defer out.Close()
 
-		if _, err := io.Copy(out, audioResp.Body); err != nil {
+		bytesWritten, err := io.Copy(out, audioResp.Body)
+		if err != nil {
 			// Clean up the file on error to prevent partial files
 			os.Remove(outputPath)
 			return fmt.Errorf("failed to write audio file: %w", err)
+		}
+
+		// Verify file size if ContentLength is available
+		if expectedSize > 0 && bytesWritten != expectedSize {
+			// Clean up the incomplete file
+			os.Remove(outputPath)
+			if debug {
+				fmt.Printf("DEBUG: File size mismatch for %s - expected: %d, got: %d bytes\n", 
+					track.Title, expectedSize, bytesWritten)
+			}
+			return fmt.Errorf("incomplete download: expected %d bytes, got %d bytes", expectedSize, bytesWritten)
+		}
+
+		if debug && expectedSize > 0 {
+			fmt.Printf("DEBUG: Successfully downloaded %s - %d bytes verified\n", track.Title, bytesWritten)
 		}
 
 		return nil
 	})
 	if err != nil {
 		return "", err
+	}
+
+	// Final verification: check if the file exists and has the correct size
+	// This catches any issues that might occur after the download completes
+	if FileExists(outputPath) {
+		// Only verify if verification is enabled (default true if not specified)
+		verifyEnabled := config == nil || config.VerifyDownloads // Default to true
+		if verifyEnabled && expectedFileSize > 0 {
+			if verifyErr := VerifyFileIntegrity(outputPath, expectedFileSize, debug); verifyErr != nil {
+				// Remove the corrupted file and return error
+				os.Remove(outputPath)
+				return "", fmt.Errorf("post-download verification failed: %w", verifyErr)
+			}
+		}
+	} else {
+		return "", fmt.Errorf("download completed but file not found on disk: %s", outputPath)
 	}
 
 	// Add metadata to the downloaded file
@@ -93,7 +139,7 @@ func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album,
 
 // DownloadSingleTrack downloads a single track.
 // It now accepts a full Track object, assuming it comes from search results.
-func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug bool, format string, bitrate string, pool *pb.Pool) error {
+func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug bool, format string, bitrate string, pool *pb.Pool, config *Config) error {
 	colorInfo.Printf("🎶 Preparing to download track: %s by %s (Album ID: %s)...\n", track.Title, track.Artist, track.AlbumID)
 
 	// Fetch the album information using the track's AlbumID
@@ -162,7 +208,7 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 	}
 
 	// Download the track
-	finalPath, err := api.DownloadTrack(ctx, *albumTrack, album, trackPath, coverData, bar, debug, format, bitrate)
+	finalPath, err := api.DownloadTrack(ctx, *albumTrack, album, trackPath, coverData, bar, debug, format, bitrate, config)
 	if err != nil {
 		if bar != nil && pool == nil { // Only finish if it's a standalone bar
 			bar.Finish()
@@ -275,7 +321,7 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 				bar = bars[idx]
 			}
 
-			if _, err := api.DownloadTrack(ctx, track, album, trackPath, coverData, bar, debug, config.Format, config.Bitrate); err != nil {
+			if _, err := api.DownloadTrack(ctx, track, album, trackPath, coverData, bar, debug, config.Format, config.Bitrate, config); err != nil {
 				errorChan <- trackError{track.Title, fmt.Errorf("track %s: %w", track.Title, err)}
 				return
 			}
