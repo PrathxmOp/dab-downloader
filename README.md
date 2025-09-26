@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.19-blue.svg)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-Educational-green.svg)](#license)
 [![Release](https://img.shields.io/github/v/release/PrathxmOp/dab-downloader)](https://github.com/PrathxmOp/dab-downloader/releases/latest)
-[![Signal Support](https://img.shields.io/badge/Support-Signal%20Group-blue.svg)](https://signal.group/#CjQKIARVUX48EP6g9DSPb2n1v6fAkxGQvdJJSWc4KLa4KFVyEhDCRiJon09heXcckPnkX6k2)
+[![Discord Support](https://img.shields.io/badge/Support-Discord-blue.svg?logo=discord&logoColor=white)](https://discord.gg/q9RnuVza2)
 ![Development Status](https://img.shields.io/badge/status-unstable%20development-orange.svg)
 
 > A powerful, modular music downloader that delivers high-quality FLAC files with comprehensive metadata support through the DAB API.
@@ -65,12 +65,12 @@
 - **Pre-Stable Release**: We're working toward a stable v1.0, but we're not there yet
 
 **📢 We strongly recommend:**
-- ✅ Joining our [Signal Support Group](https://signal.group/#CjQKIARVUX48EP6g9DSPb2n1v6fAkxGQvdJJSWc4KLa4KFVyEhDCRiJon09heXcckPnkX6k2) for real-time updates
+- [Discord Support Group](https://discord.gg/q9RnuVza2) for real-time updates
 - ✅ Checking for updates daily if you're actively using the tool
 - ✅ Being prepared to troubleshoot and report issues
 - ✅ Having patience as we work through the bugs
 
-💬 **Need Help?** Join our [Signal Support Group](httpss://signal.group/#CjQKIARVUX48EP6g9DSPb2n1v6fAkxGQvdJJSWc4KLa4KFVyEhDCRiJon09heXcckPnkX6k2) for instant community support and the latest stability updates!
+💬 **Need Help?** Join our [Discord Support Group](https://discord.gg/q9RnuVza2) for instant community support and the latest stability updates!
 
 **👤 Solo Developer Project:** This tool is developed and maintained by a single developer. While I work hard to push frequent updates and fixes (often multiple commits per day), expect some instability as I can't test every scenario across all systems.
 
@@ -228,7 +228,7 @@ For Docker users, pull the latest image from Docker Hub:
 ### 🔔 **Get Update Notifications**
 
 - **Watch this repository** on GitHub for release notifications
-- **Join our Signal group** for immediate update announcements
+- **Join our Discord group** for immediate update announcements
 - **Enable GitHub notifications** to know when new releases are available
 
 ## 📋 Usage Guide
@@ -460,7 +460,7 @@ Music/
 
 **"Something that worked yesterday is broken today"**
 - ✅ **First step:** Check for and install the latest update
-- ✅ Check the Signal group for known issues
+- ✅ Check the Discord group for known issues
 - ✅ Report the issue with your version number
 
 **"Failed to get album/artist/track"**
@@ -487,7 +487,7 @@ Music/
 
 **"It worked fine last week but now nothing works"**
 - ✅ This is expected during development - update immediately
-- ✅ Join Signal group for real-time fixes
+- ✅ Join Discord group for real-time fixes
 - ✅ Help me by reporting what broke
 
 </details>
@@ -496,7 +496,7 @@ Music/
 
 Due to the unstable nature of this project and it being a solo-developed tool, community support is essential:
 
-📱 **[Signal Support Group](https://signal.group/#CjQKIARVUX48EP6g9DSPb2n1v6fAkxGQvdJJSWc4KLa4KFVyEhDCRiJon09heXcckPnkX6k2)** - **HIGHLY RECOMMENDED**
+📱 **[Discord Support Group](https://discord.gg/q9RnuVza2)** - **HIGHLY RECOMMENDED**
 - Get real-time help and updates
 - Learn about breaking changes immediately  
 - Connect with other users experiencing similar issues
@@ -564,7 +564,7 @@ If you're willing to help us through the unstable development phase:
 - 🐛 Report issues and bugs (even small ones!)
 - 💡 Test new features and report what breaks
 - 🤝 Contribute stability fixes
-- 💬 Join our [Signal community](https://signal.group/#CjQKIARVUX48EP6g9DSPb2n1v6fAkxGQvdJJSWc4KLa4KFVyEhDCRiJon09heXcckPnkX6k2) and help other users
+- 💬 Join our [Discord community](https://discord.gg/q9RnuVza2) and help other users
 - 🔄 Help spread awareness about the need for frequent updates
 
 **Your patience and feedback during this development phase is invaluable to a solo developer! 🙏**
@@ -654,7 +654,7 @@ If you're willing to help us through the unstable development phase:
 - refactor(navidrome): improve album and track searching to prevent re-downloads
 
 ### Other
-- Added Signal Group Link
+- Added Discord Group Link
 - Shooot my config pushed
 - Enhancement in README
 - Added option to copy playlist from spotify
