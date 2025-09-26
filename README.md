@@ -353,6 +353,9 @@ These flags can be used with any command.
     -   **Example:** `--navidrome-username admin`
 -   `--navidrome-password <password>`: Your Navidrome password.
     -   **Example:** `--navidrome-password your_navidrome_password`
+-   `--warnings <mode>`: Controls how warnings are displayed during downloads.
+    -   **Modes:** `summary` (default), `immediate`, `silent`
+    -   **Example:** `--warnings immediate` for real-time warnings, `--warnings silent` for clean output
 
 ### Command-Specific Flags
 

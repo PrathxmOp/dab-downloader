@@ -32,6 +32,7 @@ type Config struct {
 	NamingMasks         NamingOptions `json:"naming"`
 	VerifyDownloads     bool `json:"VerifyDownloads"` // Enable/disable download verification
 	MaxRetryAttempts    int  `json:"MaxRetryAttempts"` // Configurable retry attempts
+	WarningBehavior     string `json:"WarningBehavior"` // "immediate", "summary", or "silent"
 }
 
 // NamingOptions defines the configurable naming masks

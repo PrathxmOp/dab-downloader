@@ -12,7 +12,7 @@ import (
 var mbClient = NewMusicBrainzClient() // Global instance of MusicBrainzClient
 
 // AddMetadata adds comprehensive metadata to a FLAC file
-func AddMetadata(filePath string, track Track, album *Album, coverData []byte, totalTracks int) error {
+func AddMetadata(filePath string, track Track, album *Album, coverData []byte, totalTracks int, warningCollector *WarningCollector) error {
 	// Open the FLAC file
 	f, err := flac.ParseFile(filePath)
 	if err != nil {
@@ -126,7 +126,9 @@ func AddMetadata(filePath string, track Track, album *Album, coverData []byte, t
 	// Fetch and add MusicBrainz metadata
 	mbTrack, err := mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
 	if err != nil {
-		colorWarning.Printf("Warning: Failed to find MusicBrainz track for %s - %s: %v\n", track.Artist, track.Title, err)
+		if warningCollector != nil {
+			warningCollector.AddMusicBrainzTrackWarning(track.Artist, track.Title, err.Error())
+		}
 	} else {
 		addField(comment, "MUSICBRAINZ_TRACKID", mbTrack.ID)
 		if len(mbTrack.ArtistCredit) > 0 {
@@ -137,7 +139,9 @@ func AddMetadata(filePath string, track Track, album *Album, coverData []byte, t
 	if album != nil {
 		mbRelease, err := mbClient.SearchRelease(album.Artist, album.Title)
 		if err != nil {
-			colorWarning.Printf("Warning: Failed to find MusicBrainz release for %s - %s: %v\n", album.Artist, album.Title, err)
+			if warningCollector != nil {
+				warningCollector.AddMusicBrainzReleaseWarning(album.Artist, album.Title, err.Error())
+			}
 		} else {
 			addField(comment, "MUSICBRAINZ_ALBUMID", mbRelease.ID)
 			if len(mbRelease.ArtistCredit) > 0 {
@@ -164,7 +168,10 @@ func AddMetadata(filePath string, track Track, album *Album, coverData []byte, t
 
 	// Add cover art if available
 	if err := addCoverArt(f, coverData); err != nil {
-		colorWarning.Printf("Warning: Failed to add cover art: %v\n", err)
+		if warningCollector != nil {
+			context := fmt.Sprintf("%s - %s", track.Artist, track.Title)
+			warningCollector.AddCoverArtMetadataWarning(context, err.Error())
+		}
 	}
 
 	// Save the file with new metadata

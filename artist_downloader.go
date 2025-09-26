@@ -15,6 +15,9 @@ import (
 
 // DownloadArtistDiscography downloads an artist's complete discography
 func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID string, config *Config, debug bool, filter string, noConfirm bool) error {
+	// Create warning collector based on config
+	warningCollector := NewWarningCollector(config.WarningBehavior != "silent")
+	
 	artist, err := api.GetArtist(ctx, artistID, config, debug)
 	if err != nil {
 		return fmt.Errorf("failed to get artist info: %w", err)
@@ -158,7 +161,7 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 			defer sem.Release(1)
 
 			colorInfo.Printf("🎵 Downloading %s %d/%d: %s\n", strings.ToUpper(item.Type), idx+1, len(itemsToDownload), item.Title)
-			itemStats, err := api.DownloadAlbum(ctx, item.ID, config, debug, pool)
+			itemStats, err := api.DownloadAlbum(ctx, item.ID, config, debug, pool, warningCollector)
 			if err != nil {
 				errorChan <- trackError{item.Title, fmt.Errorf("item %s: %w", item.Title, err)}
 			} else {
@@ -183,8 +186,14 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 		stats.FailedItems = append(stats.FailedItems, fmt.Sprintf("%s: %v", err.Title, err.Err))
 	}
 
-	// Print summary
+	// Show warning summary first if configured
+	if config.WarningBehavior == "summary" {
+		warningCollector.PrintSummary()
+	}
+	
+	// Print download summary
 	api.printDownloadStats(artist.Name, stats)
+	
 	return nil
 }
 

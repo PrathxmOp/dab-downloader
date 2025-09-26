@@ -13,7 +13,7 @@ import (
 )
 
 // DownloadTrack downloads a single track with metadata
-func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album, outputPath string, coverData []byte, bar *pb.ProgressBar, debug bool, format string, bitrate string, config *Config) (string, error) {
+func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album, outputPath string, coverData []byte, bar *pb.ProgressBar, debug bool, format string, bitrate string, config *Config, warningCollector *WarningCollector) (string, error) {
 	// Get stream URL
 	streamURL, err := api.GetStreamURL(ctx, idToString(track.ID))
 	if err != nil {
@@ -112,7 +112,7 @@ func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album,
 	}
 
 	// Add metadata to the downloaded file
-	err = AddMetadata(outputPath, track, album, coverData, len(album.Tracks))
+	err = AddMetadata(outputPath, track, album, coverData, len(album.Tracks), warningCollector)
 	if err != nil {
 		return "", fmt.Errorf("failed to add metadata: %w", err)
 	}
@@ -139,13 +139,25 @@ func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album,
 
 // DownloadSingleTrack downloads a single track.
 // It now accepts a full Track object, assuming it comes from search results.
-func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug bool, format string, bitrate string, pool *pb.Pool, config *Config) error {
+func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug bool, format string, bitrate string, pool *pb.Pool, config *Config, warningCollector *WarningCollector) error {
+	// Create warning collector if not provided (standalone track download)
+	var ownCollector bool
+	if warningCollector == nil {
+		warningCollector = NewWarningCollector(config.WarningBehavior != "silent")
+		ownCollector = true
+	}
+	colorInfo.Printf("🎶 Preparing to download track: %s by %s (Album ID: %s)...\n", track.Title, track.Artist, track.AlbumID)
+
 	colorInfo.Printf("🎶 Preparing to download track: %s by %s (Album ID: %s)...\n", track.Title, track.Artist, track.AlbumID)
 
 	// Fetch the album information using the track's AlbumID
 	album, err := api.GetAlbum(ctx, track.AlbumID)
 	if err != nil {
-		colorWarning.Printf("⚠️ Could not fetch album info for track %s (ID: %s): %v. Attempting to proceed with limited album info.\n", track.Title, idToString(track.ID), err)
+		if config.WarningBehavior == "immediate" {
+			colorWarning.Printf("⚠️ Could not fetch album info for track %s (ID: %s): %v. Attempting to proceed with limited album info.\n", track.Title, idToString(track.ID), err)
+		} else {
+			warningCollector.AddAlbumFetchWarning(track.Title, idToString(track.ID), err.Error())
+		}
 		// Create a minimal album object if fetching fails, to allow metadata to be added
 		album = &Album{Title: track.Album, Artist: track.Artist, Tracks: []Track{track}}
 	}
@@ -170,7 +182,11 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 	if album.Cover != "" {
 		coverData, err = api.DownloadCover(ctx, album.Cover)
 		if err != nil {
-			colorWarning.Printf("⚠️ Could not download cover art for album %s: %v\n", album.Title, err)
+			if config.WarningBehavior == "immediate" {
+				colorWarning.Printf("⚠️ Could not download cover art for album %s: %v\n", album.Title, err)
+			} else {
+				warningCollector.AddCoverArtDownloadWarning(album.Title, err.Error())
+			}
 		}
 	}
 
@@ -182,7 +198,11 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 
 	// Skip if already exists
 	if FileExists(trackPath) {
-		colorWarning.Printf("⭐ Track already exists: %s\n", trackPath)
+		if config.WarningBehavior == "immediate" {
+			colorWarning.Printf("⭐ Track already exists: %s\n", trackPath)
+		} else {
+			warningCollector.AddTrackSkippedWarning(trackPath)
+		}
 		return nil
 	}
 
@@ -208,7 +228,7 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 	}
 
 	// Download the track
-	finalPath, err := api.DownloadTrack(ctx, *albumTrack, album, trackPath, coverData, bar, debug, format, bitrate, config)
+	finalPath, err := api.DownloadTrack(ctx, *albumTrack, album, trackPath, coverData, bar, debug, format, bitrate, config, warningCollector)
 	if err != nil {
 		if bar != nil && pool == nil { // Only finish if it's a standalone bar
 			bar.Finish()
@@ -220,12 +240,25 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 	}
 
 	colorSuccess.Printf("✅ Successfully downloaded: %s\n", finalPath)
+	
+	// Show warning summary only if we own the collector (standalone download)
+	if ownCollector && config.WarningBehavior == "summary" {
+		warningCollector.PrintSummary()
+	}
+	
 	return nil
 }
 
 
 // DownloadAlbum downloads all tracks from an album
-func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Config, debug bool, pool *pb.Pool) (*DownloadStats, error) {
+func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Config, debug bool, pool *pb.Pool, warningCollector *WarningCollector) (*DownloadStats, error) {
+	// Create warning collector if not provided (standalone album download)
+	var ownCollector bool
+	if warningCollector == nil {
+		warningCollector = NewWarningCollector(config.WarningBehavior != "silent")
+		ownCollector = true
+	}
+	
 	album, err := api.GetAlbum(ctx, albumID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get album info: %w", err)
@@ -243,14 +276,22 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 	if album.Cover != "" {
 		coverData, err = api.DownloadCover(ctx, album.Cover)
 		if err != nil {
-			colorWarning.Printf("⚠️ Could not download cover art for album %s: %v\n", album.Title, err)
+			if config.WarningBehavior == "immediate" {
+				colorWarning.Printf("⚠️ Could not download cover art for album %s: %v\n", album.Title, err)
+			} else {
+				warningCollector.AddCoverArtDownloadWarning(album.Title, err.Error())
+			}
 		}
 	}
 
 	if config.SaveAlbumArt && coverData != nil {
 		coverPath := filepath.Join(albumDir, "cover.jpg")
 		if err := os.WriteFile(coverPath, coverData, 0644); err != nil {
-			colorWarning.Printf("⚠️ Failed to save cover art for album %s: %v\n", album.Title, err)
+			if config.WarningBehavior == "immediate" {
+				colorWarning.Printf("⚠️ Failed to save cover art for album %s: %v\n", album.Title, err)
+			} else {
+				warningCollector.AddCoverArtDownloadWarning(album.Title, fmt.Sprintf("Failed to save: %v", err))
+			}
 		}
 	}
 
@@ -311,7 +352,11 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 
 			// Skip if already exists
 			if FileExists(trackPath) {
-				colorWarning.Printf("⭐ Track already exists: %s\n", trackPath)
+				if config.WarningBehavior == "immediate" {
+					colorWarning.Printf("⭐ Track already exists: %s\n", trackPath)
+				} else {
+					warningCollector.AddTrackSkippedWarning(trackPath)
+				}
 				stats.SkippedCount++
 				return
 			}
@@ -321,7 +366,7 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 				bar = bars[idx]
 			}
 
-			if _, err := api.DownloadTrack(ctx, track, album, trackPath, coverData, bar, debug, config.Format, config.Bitrate, config); err != nil {
+			if _, err := api.DownloadTrack(ctx, track, album, trackPath, coverData, bar, debug, config.Format, config.Bitrate, config, warningCollector); err != nil {
 				errorChan <- trackError{track.Title, fmt.Errorf("track %s: %w", track.Title, err)}
 				return
 			}
@@ -342,6 +387,11 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 	for err := range errorChan {
 		stats.FailedCount++
 		stats.FailedItems = append(stats.FailedItems, fmt.Sprintf("%s: %v", err.Title, err.Err))
+	}
+
+	// Show warning summary only if we own the collector (standalone download)
+	if ownCollector && config.WarningBehavior == "summary" {
+		warningCollector.PrintSummary()
 	}
 
 	return stats, nil
