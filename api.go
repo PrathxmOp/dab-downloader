@@ -400,6 +400,7 @@ func (api *DabAPI) Search(ctx context.Context, query string, searchType string, 
 			}
 			var data map[string]json.RawMessage
 			if err := json.Unmarshal(body, &data); err != nil {
+				fmt.Printf("ERROR: Failed to unmarshal JSON. Raw response body: %s\n", string(body))
 				errChan <- err
 				return
 			}
