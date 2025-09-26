@@ -161,7 +161,7 @@ var searchCmd = &cobra.Command{
 					track := selectedItem.(Track)
 					colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
 					// Now call the modified DownloadSingleTrack which expects a Track object and potentially a pool
-					if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate, pool); err != nil {
+					if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate, pool, config); err != nil {
 						colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
 					} else {
 						colorSuccess.Println("✅ Track download completed for", track.Title)
@@ -303,7 +303,7 @@ uniqueAlbums[albumKey] = track
 					if itemType == "track" {
 						track := selectedItem.(Track)
 						colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
-						if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate, pool); err != nil {
+						if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate, pool, config); err != nil {
 							colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
 						} else {
 							colorSuccess.Println("✅ Track download completed for", track.Title)
@@ -455,7 +455,7 @@ var navidromeCmd = &cobra.Command{
 					if selectedDabItemType == "track" {
 						dabTrack := selectedDabItem.(Track)
 					colorInfo.Printf("🎵 Downloading %s by %s from DAB...\n", dabTrack.Title, dabTrack.Artist)
-						if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, config.Format, config.Bitrate, nil); err != nil {
+						if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, config.Format, config.Bitrate, nil, config); err != nil {
 							colorError.Printf("❌ Failed to download track %s from DAB: %v\n", dabTrack.Title, err)
 						} else {
 							colorSuccess.Printf("✅ Downloaded %s by %s from DAB. It should appear in Navidrome soon.\n", dabTrack.Title, dabTrack.Artist)
@@ -600,6 +600,8 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 		DownloadLocation: filepath.Join(homeDir, "Music"),
 		Parallelism:      5,
 		UpdateRepo:       "PrathxmOp/dab-downloader", // Default value
+		VerifyDownloads:  true, // Enable download verification by default
+		MaxRetryAttempts: defaultMaxRetries, // Use default retry attempts
 	}
 
 	// Define the config file path in the current directory

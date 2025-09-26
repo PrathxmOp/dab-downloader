@@ -209,3 +209,38 @@ func removeSuffix(trackTitle string, suffix string) string {
 	re := regexp.MustCompile(fmt.Sprintf(`(?i)( - |\s*\()((\d{4} )?)?(%s(ed)?( Version)?|Digital (Master?|%s(ed)?)|Remix)( \d{4})?(\))?$`, suffix, suffix))
 	return re.ReplaceAllString(trackTitle, "")
 }
+// VerifyFileSize checks if a file exists and matches the expected size
+func VerifyFileSize(filePath string, expectedSize int64) (bool, int64, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return false, 0, fmt.Errorf("failed to stat file: %w", err)
+	}
+	
+	actualSize := info.Size()
+	return actualSize == expectedSize, actualSize, nil
+}
+
+// VerifyFileIntegrity performs additional checks on downloaded files
+func VerifyFileIntegrity(filePath string, expectedSize int64, debug bool) error {
+	if expectedSize <= 0 {
+		if debug {
+			fmt.Printf("DEBUG: Skipping file integrity check for %s - no expected size available\n", filePath)
+		}
+		return nil // Skip verification if no expected size
+	}
+
+	matches, actualSize, err := VerifyFileSize(filePath, expectedSize)
+	if err != nil {
+		return fmt.Errorf("file verification failed: %w", err)
+	}
+
+	if !matches {
+		return fmt.Errorf("file size mismatch: expected %d bytes, got %d bytes", expectedSize, actualSize)
+	}
+
+	if debug {
+		fmt.Printf("DEBUG: File integrity verified for %s - %d bytes\n", filePath, actualSize)
+	}
+
+	return nil
+}
