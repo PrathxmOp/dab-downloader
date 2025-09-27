@@ -43,8 +43,9 @@ var (
 	navidromePassword   string
 	format              string = "flac"
 	bitrate             string = "320"
-	ignoreSuffix      string
+	ignoreSuffix        string
 	insecure            bool
+	warningBehavior     string = "summary"
 )
 
 var rootCmd = &cobra.Command{
@@ -90,7 +91,7 @@ var albumCmd = &cobra.Command{
 			}
 			albumID := args[0]
 			colorInfo.Println("🎵 Starting album download for ID:", albumID)
-			if _, err := api.DownloadAlbum(context.Background(), albumID, config, debug, nil); err != nil {
+			if _, err := api.DownloadAlbum(context.Background(), albumID, config, debug, nil, nil); err != nil {
 				colorError.Printf("❌ Failed to download album: %v\n", err)
 			} else {
 				colorSuccess.Println("✅ Album download completed!")
@@ -152,7 +153,7 @@ var searchCmd = &cobra.Command{
 				case "album":
 					album := selectedItem.(Album)
 					colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
-					if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil); err != nil {
+					if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil, nil); err != nil {
 						colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
 					} else {
 						colorSuccess.Println("✅ Album download completed for", album.Title)
@@ -161,7 +162,7 @@ var searchCmd = &cobra.Command{
 					track := selectedItem.(Track)
 					colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
 					// Now call the modified DownloadSingleTrack which expects a Track object and potentially a pool
-					if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate, pool, config); err != nil {
+					if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate, pool, config, nil); err != nil {
 						colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
 					} else {
 						colorSuccess.Println("✅ Track download completed for", track.Title)
@@ -250,7 +251,7 @@ uniqueAlbums[albumKey] = track
 						if itemTypes[i] == "album" {
 							album := selectedItem.(Album)
 							colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
-							if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil); err != nil {
+							if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil, nil); err != nil {
 								colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
 							} else {
 								colorSuccess.Println("✅ Album download completed for", album.Title)
@@ -303,7 +304,7 @@ uniqueAlbums[albumKey] = track
 					if itemType == "track" {
 						track := selectedItem.(Track)
 						colorInfo.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
-						if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate, pool, config); err != nil {
+						if err := api.DownloadSingleTrack(context.Background(), track, debug, config.Format, config.Bitrate, pool, config, nil); err != nil {
 							colorError.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
 						} else {
 							colorSuccess.Println("✅ Track download completed for", track.Title)
@@ -386,7 +387,7 @@ var navidromeCmd = &cobra.Command{
 					if itemTypes[i] == "album" {
 						album := selectedItem.(Album)
 						colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
-						if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil); err != nil {
+						if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil, nil); err != nil {
 							colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
 						} else {
 							colorSuccess.Println("✅ Album download completed for", album.Title)
@@ -455,7 +456,7 @@ var navidromeCmd = &cobra.Command{
 					if selectedDabItemType == "track" {
 						dabTrack := selectedDabItem.(Track)
 					colorInfo.Printf("🎵 Downloading %s by %s from DAB...\n", dabTrack.Title, dabTrack.Artist)
-						if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, config.Format, config.Bitrate, nil, config); err != nil {
+						if err := api.DownloadSingleTrack(context.Background(), dabTrack, debug, config.Format, config.Bitrate, nil, config, nil); err != nil {
 							colorError.Printf("❌ Failed to download track %s from DAB: %v\n", dabTrack.Title, err)
 						} else {
 							colorSuccess.Printf("✅ Downloaded %s by %s from DAB. It should appear in Navidrome soon.\n", dabTrack.Title, dabTrack.Artist)
@@ -602,6 +603,7 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 		UpdateRepo:       "PrathxmOp/dab-downloader", // Default value
 		VerifyDownloads:  true, // Enable download verification by default
 		MaxRetryAttempts: defaultMaxRetries, // Use default retry attempts
+		WarningBehavior:  "summary", // Default to summary mode for cleaner output
 	}
 
 	// Define the config file path in the current directory
@@ -697,6 +699,15 @@ func initConfigAndAPI() (*Config, *DabAPI) {
 	if bitrate != "320" { // Check if bitrate flag was explicitly set
 		config.Bitrate = bitrate
 	}
+	if warningBehavior != "summary" { // Check if warning behavior flag was explicitly set
+		config.WarningBehavior = warningBehavior
+	}
+	
+	// Validate warning behavior
+	if config.WarningBehavior != "immediate" && config.WarningBehavior != "summary" && config.WarningBehavior != "silent" {
+		colorWarning.Printf("⚠️ Invalid warning behavior '%s', using default 'summary'\n", config.WarningBehavior)
+		config.WarningBehavior = "summary"
+	}
 
 	// Create a new http.Client
 	client := &http.Client{
@@ -718,6 +729,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&downloadLocation, "download-location", "", "Directory to save downloads")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging")
 	rootCmd.PersistentFlags().BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification")
+	rootCmd.PersistentFlags().StringVar(&warningBehavior, "warnings", "summary", "Warning behavior: 'immediate', 'summary', or 'silent'")
 
 	albumCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to after downloading (e.g., mp3, ogg, opus)")
 	albumCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats (in kbps, e.g., 192, 256, 320)")

@@ -14,21 +14,78 @@ const (
 	musicBrainzUserAgent = "dab-downloader/2.0 ( prathxm.in@gmail.com )" // Replace with your actual email or project contact
 )
 
+// MusicBrainzConfig holds retry configuration for MusicBrainz API calls
+type MusicBrainzConfig struct {
+	MaxRetries    int           `json:"max_retries"`
+	InitialDelay  time.Duration `json:"initial_delay"`
+	MaxDelay      time.Duration `json:"max_delay"`
+}
+
+// DefaultMusicBrainzConfig returns sensible defaults for MusicBrainz API retry behavior
+func DefaultMusicBrainzConfig() MusicBrainzConfig {
+	return MusicBrainzConfig{
+		MaxRetries:   5,
+		InitialDelay: 2 * time.Second,
+		MaxDelay:     60 * time.Second,
+	}
+}
+
 // MusicBrainzClient for making requests to the MusicBrainz API
 type MusicBrainzClient struct {
 	client *http.Client
+	config MusicBrainzConfig
+	debug  bool
 }
 
-// NewMusicBrainzClient creates a new MusicBrainz API client
+// NewMusicBrainzClient creates a new MusicBrainz API client with default retry configuration
 func NewMusicBrainzClient() *MusicBrainzClient {
 	return &MusicBrainzClient{
 		client: &http.Client{
 			Timeout: 30 * time.Second, // MusicBrainz API can be slow
 		},
+		config: DefaultMusicBrainzConfig(),
+		debug:  false,
 	}
 }
 
-// get makes a GET request to the MusicBrainz API
+// NewMusicBrainzClientWithConfig creates a new MusicBrainz API client with custom retry configuration
+func NewMusicBrainzClientWithConfig(config MusicBrainzConfig) *MusicBrainzClient {
+	return &MusicBrainzClient{
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		config: config,
+		debug:  false,
+	}
+}
+
+// NewMusicBrainzClientWithDebug creates a new MusicBrainz API client with debug mode
+func NewMusicBrainzClientWithDebug(debug bool) *MusicBrainzClient {
+	return &MusicBrainzClient{
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		config: DefaultMusicBrainzConfig(),
+		debug:  debug,
+	}
+}
+
+// UpdateRetryConfig updates the retry configuration for the client
+func (mb *MusicBrainzClient) UpdateRetryConfig(config MusicBrainzConfig) {
+	mb.config = config
+}
+
+// GetRetryConfig returns the current retry configuration
+func (mb *MusicBrainzClient) GetRetryConfig() MusicBrainzConfig {
+	return mb.config
+}
+
+// SetDebug enables or disables debug logging for the client
+func (mb *MusicBrainzClient) SetDebug(debug bool) {
+	mb.debug = debug
+}
+
+// get makes a GET request to the MusicBrainz API (internal method without retry)
 func (mb *MusicBrainzClient) get(path string) ([]byte, error) {
 	req, err := http.NewRequest("GET", musicBrainzAPI+path, nil)
 	if err != nil {
@@ -44,7 +101,17 @@ func (mb *MusicBrainzClient) get(path string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("MusicBrainz API request failed with status: %s", resp.Status)
+		// Create structured HTTP error for retry logic
+		body, _ := ioutil.ReadAll(resp.Body)
+		message := string(body)
+		if len(message) > 200 {
+			message = message[:200] + "..."
+		}
+		return nil, &HTTPError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Message:    message,
+		}
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
@@ -54,10 +121,32 @@ func (mb *MusicBrainzClient) get(path string) ([]byte, error) {
 	return body, nil
 }
 
+// getWithRetry makes a GET request to the MusicBrainz API with retry logic for retryable errors
+func (mb *MusicBrainzClient) getWithRetry(path string) ([]byte, error) {
+	var result []byte
+	var err error
+
+	retryErr := RetryWithBackoffForHTTPWithDebug(
+		mb.config.MaxRetries,
+		mb.config.InitialDelay,
+		mb.config.MaxDelay,
+		func() error {
+			result, err = mb.get(path)
+			return err
+		},
+		mb.debug,
+	)
+
+	if retryErr != nil {
+		return nil, retryErr
+	}
+	return result, nil
+}
+
 // GetTrackMetadata fetches track metadata from MusicBrainz by MBID
 func (mb *MusicBrainzClient) GetTrackMetadata(mbid string) (*MusicBrainzTrack, error) {
 	path := fmt.Sprintf("recording/%s?inc=artists+releases+url-rels", mbid)
-	body, err := mb.get(path)
+	body, err := mb.getWithRetry(path)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +161,7 @@ func (mb *MusicBrainzClient) GetTrackMetadata(mbid string) (*MusicBrainzTrack, e
 // GetReleaseMetadata fetches release (album) metadata from MusicBrainz by MBID
 func (mb *MusicBrainzClient) GetReleaseMetadata(mbid string) (*MusicBrainzRelease, error) {
 	path := fmt.Sprintf("release/%s?inc=artists+labels+recordings+url-rels+release-groups", mbid)
-	body, err := mb.get(path)
+	body, err := mb.getWithRetry(path)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +177,7 @@ func (mb *MusicBrainzClient) GetReleaseMetadata(mbid string) (*MusicBrainzReleas
 func (mb *MusicBrainzClient) SearchTrack(artist, album, title string) (*MusicBrainzTrack, error) {
 	query := fmt.Sprintf("artist:\"%s\" AND release:\"%s\" AND recording:\"%s\"", artist, album, title)
 	path := fmt.Sprintf("recording?query=%s&limit=1", url.QueryEscape(query))
-	body, err := mb.get(path)
+	body, err := mb.getWithRetry(path)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +200,7 @@ func (mb *MusicBrainzClient) SearchTrack(artist, album, title string) (*MusicBra
 func (mb *MusicBrainzClient) SearchRelease(artist, album string) (*MusicBrainzRelease, error) {
 	query := fmt.Sprintf("artist:\"%s\" AND release:\"%s\"", artist, album)
 	path := fmt.Sprintf("release?query=%s&limit=1", url.QueryEscape(query))
-	body, err := mb.get(path)
+	body, err := mb.getWithRetry(path)
 	if err != nil {
 		return nil, err
 	}
