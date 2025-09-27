@@ -88,6 +88,28 @@ func (wc *WarningCollector) AddTrackSkippedWarning(trackPath string) {
 	wc.AddWarning(TrackSkippedWarning, trackPath, "Track already exists", "")
 }
 
+// RemoveWarningsByTypeAndContext removes warnings of a specific type and context
+func (wc *WarningCollector) RemoveWarningsByTypeAndContext(warningType WarningType, context string) {
+	if !wc.enabled {
+		return
+	}
+	
+	var filteredWarnings []Warning
+	for _, warning := range wc.warnings {
+		// Keep warnings that don't match the type and context
+		if warning.Type != warningType || warning.Context != context {
+			filteredWarnings = append(filteredWarnings, warning)
+		}
+	}
+	wc.warnings = filteredWarnings
+}
+
+// RemoveMusicBrainzReleaseWarning removes a specific MusicBrainz release warning
+func (wc *WarningCollector) RemoveMusicBrainzReleaseWarning(artist, album string) {
+	context := fmt.Sprintf("%s - %s", artist, album)
+	wc.RemoveWarningsByTypeAndContext(MusicBrainzReleaseWarning, context)
+}
+
 // HasWarnings returns true if there are any warnings
 func (wc *WarningCollector) HasWarnings() bool {
 	return len(wc.warnings) > 0

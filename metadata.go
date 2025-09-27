@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/go-flac/go-flac"
 	"github.com/go-flac/flacpicture"
@@ -11,8 +12,57 @@ import (
 
 var mbClient = NewMusicBrainzClient() // Global instance of MusicBrainzClient
 
+// SetMusicBrainzDebug sets debug mode for the global MusicBrainz client
+func SetMusicBrainzDebug(debug bool) {
+	mbClient.SetDebug(debug)
+}
+
+// AlbumMetadataCache holds cached MusicBrainz release metadata for albums
+type AlbumMetadataCache struct {
+	releases map[string]*MusicBrainzRelease // key: "artist|album"
+	mu       sync.RWMutex
+}
+
+// Global cache instance
+var albumCache = &AlbumMetadataCache{
+	releases: make(map[string]*MusicBrainzRelease),
+}
+
+// getCacheKey generates a cache key for an album
+func getCacheKey(artist, album string) string {
+	return fmt.Sprintf("%s|%s", artist, album)
+}
+
+// GetCachedRelease retrieves cached release metadata
+func (cache *AlbumMetadataCache) GetCachedRelease(artist, album string) *MusicBrainzRelease {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+	return cache.releases[getCacheKey(artist, album)]
+}
+
+// SetCachedRelease stores release metadata in cache
+func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release *MusicBrainzRelease) {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.releases[getCacheKey(artist, album)] = release
+}
+
+// ClearCache clears the album metadata cache (useful for testing or memory management)
+func (cache *AlbumMetadataCache) ClearCache() {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.releases = make(map[string]*MusicBrainzRelease)
+}
+
 // AddMetadata adds comprehensive metadata to a FLAC file
 func AddMetadata(filePath string, track Track, album *Album, coverData []byte, totalTracks int, warningCollector *WarningCollector) error {
+	return AddMetadataWithDebug(filePath, track, album, coverData, totalTracks, warningCollector, false)
+}
+
+// AddMetadataWithDebug adds comprehensive metadata to a FLAC file with debug mode support
+func AddMetadataWithDebug(filePath string, track Track, album *Album, coverData []byte, totalTracks int, warningCollector *WarningCollector, debug bool) error {
+	// Set debug mode for MusicBrainz client
+	mbClient.SetDebug(debug)
 	// Open the FLAC file
 	f, err := flac.ParseFile(filePath)
 	if err != nil {
@@ -123,35 +173,8 @@ func AddMetadata(filePath string, track Track, album *Album, coverData []byte, t
 	// 	addField(comment, "MUSICBRAINZ_ALBUMID", album.ID) // This is wrong
 	// }
 
-	// Fetch and add MusicBrainz metadata
-	mbTrack, err := mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
-	if err != nil {
-		if warningCollector != nil {
-			warningCollector.AddMusicBrainzTrackWarning(track.Artist, track.Title, err.Error())
-		}
-	} else {
-		addField(comment, "MUSICBRAINZ_TRACKID", mbTrack.ID)
-		if len(mbTrack.ArtistCredit) > 0 {
-			addField(comment, "MUSICBRAINZ_ARTISTID", mbTrack.ArtistCredit[0].Artist.ID)
-		}
-	}
-
-	if album != nil {
-		mbRelease, err := mbClient.SearchRelease(album.Artist, album.Title)
-		if err != nil {
-			if warningCollector != nil {
-				warningCollector.AddMusicBrainzReleaseWarning(album.Artist, album.Title, err.Error())
-			}
-		} else {
-			addField(comment, "MUSICBRAINZ_ALBUMID", mbRelease.ID)
-			if len(mbRelease.ArtistCredit) > 0 {
-				addField(comment, "MUSICBRAINZ_ALBUMARTISTID", mbRelease.ArtistCredit[0].Artist.ID)
-			}
-			if mbRelease.ReleaseGroup.ID != "" {
-				addField(comment, "MUSICBRAINZ_RELEASEGROUPID", mbRelease.ReleaseGroup.ID)
-			}
-		}
-	}
+	// Fetch and add MusicBrainz metadata with optimized caching
+	addMusicBrainzMetadata(comment, track, album, albumTitle, warningCollector)
 
 	addField(comment, "ENCODER", "EnhancedFLACDownloader/2.0")
 	addField(comment, "ENCODING", "FLAC")
@@ -233,6 +256,62 @@ func getGenre(track Track, album *Album) string {
 	return ""
 }
 
+// addMusicBrainzMetadata handles optimized MusicBrainz metadata fetching with caching
+func addMusicBrainzMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track Track, album *Album, albumTitle string, warningCollector *WarningCollector) {
+	// Fetch track-specific metadata
+	mbTrack, err := mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
+	if err != nil {
+		if warningCollector != nil {
+			warningCollector.AddMusicBrainzTrackWarning(track.Artist, track.Title, err.Error())
+		}
+	} else {
+		addField(comment, "MUSICBRAINZ_TRACKID", mbTrack.ID)
+		if len(mbTrack.ArtistCredit) > 0 {
+			addField(comment, "MUSICBRAINZ_ARTISTID", mbTrack.ArtistCredit[0].Artist.ID)
+		}
+	}
+
+	// Handle release-level metadata with caching
+	if album != nil {
+		addReleaseMetadata(comment, album.Artist, album.Title, warningCollector)
+	}
+}
+
+// addReleaseMetadata handles release-level MusicBrainz metadata with caching and retry logic
+func addReleaseMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, artist, albumTitle string, warningCollector *WarningCollector) {
+	// Check cache first
+	mbRelease := albumCache.GetCachedRelease(artist, albumTitle)
+	
+	if mbRelease == nil {
+		// Not in cache, fetch from MusicBrainz
+		var err error
+		mbRelease, err = mbClient.SearchRelease(artist, albumTitle)
+		if err != nil {
+			if warningCollector != nil {
+				warningCollector.AddMusicBrainzReleaseWarning(artist, albumTitle, err.Error())
+			}
+			return
+		}
+		
+		// Cache the successful result
+		albumCache.SetCachedRelease(artist, albumTitle, mbRelease)
+		
+		// Clear any previous warnings for this release since we now have the metadata
+		if warningCollector != nil {
+			warningCollector.RemoveMusicBrainzReleaseWarning(artist, albumTitle)
+		}
+	}
+	
+	// Add release-level metadata fields
+	addField(comment, "MUSICBRAINZ_ALBUMID", mbRelease.ID)
+	if len(mbRelease.ArtistCredit) > 0 {
+		addField(comment, "MUSICBRAINZ_ALBUMARTISTID", mbRelease.ArtistCredit[0].Artist.ID)
+	}
+	if mbRelease.ReleaseGroup.ID != "" {
+		addField(comment, "MUSICBRAINZ_RELEASEGROUPID", mbRelease.ReleaseGroup.ID)
+	}
+}
+
 // addCoverArt adds cover art to the FLAC file
 func addCoverArt(f *flac.File, coverData []byte) error {
 	if coverData == nil || len(coverData) == 0 {
@@ -297,4 +376,21 @@ func detectImageFormat(data []byte) string {
 
 		// Default to JPEG if we can't determine
 		return "image/jpeg"
+}
+// GetCacheStats returns statistics about the current cache state
+func GetCacheStats() (int, []string) {
+	albumCache.mu.RLock()
+	defer albumCache.mu.RUnlock()
+	
+	count := len(albumCache.releases)
+	var keys []string
+	for key := range albumCache.releases {
+		keys = append(keys, key)
+	}
+	return count, keys
+}
+
+// ClearAlbumCache clears the global album metadata cache
+func ClearAlbumCache() {
+	albumCache.ClearCache()
 }

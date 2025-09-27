@@ -52,6 +52,11 @@ func RetryWithBackoff(maxRetries int, initialDelaySec int, fn func() error) erro
 
 // RetryWithBackoffForHTTP retries HTTP requests with smart error handling
 func RetryWithBackoffForHTTP(maxRetries int, initialDelay time.Duration, maxDelay time.Duration, fn func() error) error {
+	return RetryWithBackoffForHTTPWithDebug(maxRetries, initialDelay, maxDelay, fn, false)
+}
+
+// RetryWithBackoffForHTTPWithDebug retries HTTP requests with smart error handling and optional debug logging
+func RetryWithBackoffForHTTPWithDebug(maxRetries int, initialDelay time.Duration, maxDelay time.Duration, fn func() error, debug bool) error {
 	var lastErr error
 	
 	for attempt := 0; attempt < maxRetries; attempt++ {
@@ -83,8 +88,11 @@ func RetryWithBackoffForHTTP(maxRetries int, initialDelay time.Duration, maxDela
 			finalDelay = delay
 		}
 
-		log.Printf("HTTP request failed (attempt %d/%d): %v. Retrying in %v", 
-			attempt+1, maxRetries, lastErr, finalDelay)
+		// Only log retry messages in debug mode
+		if debug {
+			log.Printf("HTTP request failed (attempt %d/%d): %v. Retrying in %v", 
+				attempt+1, maxRetries, lastErr, finalDelay)
+		}
 		
 		time.Sleep(finalDelay)
 	}

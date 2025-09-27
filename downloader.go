@@ -6,9 +6,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/cheggaaa/pb/v3"
+	"github.com/go-flac/go-flac"
+	"github.com/go-flac/flacvorbis"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -112,7 +115,7 @@ func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album,
 	}
 
 	// Add metadata to the downloaded file
-	err = AddMetadata(outputPath, track, album, coverData, len(album.Tracks), warningCollector)
+	err = AddMetadataWithDebug(outputPath, track, album, coverData, len(album.Tracks), warningCollector, debug)
 	if err != nil {
 		return "", fmt.Errorf("failed to add metadata: %w", err)
 	}
@@ -389,10 +392,119 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 		stats.FailedItems = append(stats.FailedItems, fmt.Sprintf("%s: %v", err.Title, err.Err))
 	}
 
+	// After all downloads complete, check if we can retroactively update any failed tracks
+	// with release metadata that might have been fetched successfully
+	if album != nil {
+		updateFailedTracksWithReleaseMetadata(albumDir, album, warningCollector)
+	}
+
 	// Show warning summary only if we own the collector (standalone download)
 	if ownCollector && config.WarningBehavior == "summary" {
 		warningCollector.PrintSummary()
 	}
 
 	return stats, nil
+}
+
+// updateFailedTracksWithReleaseMetadata retroactively updates FLAC files with release metadata
+// when the release metadata was successfully fetched after some tracks had already been processed
+func updateFailedTracksWithReleaseMetadata(albumDir string, album *Album, warningCollector *WarningCollector) {
+	if album == nil {
+		return
+	}
+
+	// Check if we have cached release metadata for this album
+	mbRelease := albumCache.GetCachedRelease(album.Artist, album.Title)
+	if mbRelease == nil {
+		return // No release metadata available
+	}
+
+	// Find all FLAC files in the album directory
+	files, err := filepath.Glob(filepath.Join(albumDir, "*.flac"))
+	if err != nil {
+		return
+	}
+
+	updatedCount := 0
+	for _, filePath := range files {
+		if updateTrackWithReleaseMetadata(filePath, mbRelease, warningCollector) {
+			updatedCount++
+		}
+	}
+
+	// If we successfully updated any tracks, clear the release warning since we now have the metadata
+	if updatedCount > 0 && warningCollector != nil {
+		warningCollector.RemoveMusicBrainzReleaseWarning(album.Artist, album.Title)
+	}
+}
+
+// updateTrackWithReleaseMetadata updates a single FLAC file with release metadata
+// Returns true if the track was successfully updated, false otherwise
+func updateTrackWithReleaseMetadata(filePath string, mbRelease *MusicBrainzRelease, warningCollector *WarningCollector) bool {
+	// Open the FLAC file
+	f, err := flac.ParseFile(filePath)
+	if err != nil {
+		return false // Skip files that can't be parsed
+	}
+
+	// Find the existing Vorbis comment block
+	var vorbisBlock *flac.MetaDataBlock
+	for _, block := range f.Meta {
+		if block.Type == flac.VorbisComment {
+			vorbisBlock = block
+			break
+		}
+	}
+
+	if vorbisBlock == nil {
+		return false // No vorbis comment block found
+	}
+
+	// Parse the existing vorbis comment
+	comment, err := flacvorbis.ParseFromMetaDataBlock(*vorbisBlock)
+	if err != nil {
+		return false
+	}
+
+	// Check if release metadata is already present
+	if hasReleaseMetadata(comment) {
+		return false // Already has release metadata
+	}
+
+	// Add the missing release metadata
+	addField(comment, "MUSICBRAINZ_ALBUMID", mbRelease.ID)
+	if len(mbRelease.ArtistCredit) > 0 {
+		addField(comment, "MUSICBRAINZ_ALBUMARTISTID", mbRelease.ArtistCredit[0].Artist.ID)
+	}
+	if mbRelease.ReleaseGroup.ID != "" {
+		addField(comment, "MUSICBRAINZ_RELEASEGROUPID", mbRelease.ReleaseGroup.ID)
+	}
+
+	// Replace the old vorbis comment block with the updated one
+	newVorbisBlock := comment.Marshal()
+	for i, block := range f.Meta {
+		if block.Type == flac.VorbisComment {
+			f.Meta[i] = &newVorbisBlock
+			break
+		}
+	}
+
+	// Save the updated file
+	if err := f.Save(filePath); err != nil {
+		if warningCollector != nil {
+			warningCollector.AddCoverArtMetadataWarning(filePath, fmt.Sprintf("Failed to update release metadata: %v", err))
+		}
+		return false
+	}
+
+	return true // Successfully updated
+}
+
+// hasReleaseMetadata checks if the vorbis comment already contains release metadata
+func hasReleaseMetadata(comment *flacvorbis.MetaDataBlockVorbisComment) bool {
+	// Convert the comment to string and check for MusicBrainz fields
+	commentStr := string(comment.Marshal().Data)
+	return strings.Contains(commentStr, "MUSICBRAINZ_ALBUMID") ||
+		   strings.Contains(commentStr, "MUSICBRAINZ_ALBUMARTISTID") ||
+		   strings.Contains(commentStr, "MUSICBRAINZ_RELEASEGROUPID")
 }

@@ -34,6 +34,7 @@ func DefaultMusicBrainzConfig() MusicBrainzConfig {
 type MusicBrainzClient struct {
 	client *http.Client
 	config MusicBrainzConfig
+	debug  bool
 }
 
 // NewMusicBrainzClient creates a new MusicBrainz API client with default retry configuration
@@ -43,6 +44,7 @@ func NewMusicBrainzClient() *MusicBrainzClient {
 			Timeout: 30 * time.Second, // MusicBrainz API can be slow
 		},
 		config: DefaultMusicBrainzConfig(),
+		debug:  false,
 	}
 }
 
@@ -53,6 +55,18 @@ func NewMusicBrainzClientWithConfig(config MusicBrainzConfig) *MusicBrainzClient
 			Timeout: 30 * time.Second,
 		},
 		config: config,
+		debug:  false,
+	}
+}
+
+// NewMusicBrainzClientWithDebug creates a new MusicBrainz API client with debug mode
+func NewMusicBrainzClientWithDebug(debug bool) *MusicBrainzClient {
+	return &MusicBrainzClient{
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		config: DefaultMusicBrainzConfig(),
+		debug:  debug,
 	}
 }
 
@@ -64,6 +78,11 @@ func (mb *MusicBrainzClient) UpdateRetryConfig(config MusicBrainzConfig) {
 // GetRetryConfig returns the current retry configuration
 func (mb *MusicBrainzClient) GetRetryConfig() MusicBrainzConfig {
 	return mb.config
+}
+
+// SetDebug enables or disables debug logging for the client
+func (mb *MusicBrainzClient) SetDebug(debug bool) {
+	mb.debug = debug
 }
 
 // get makes a GET request to the MusicBrainz API (internal method without retry)
@@ -107,7 +126,7 @@ func (mb *MusicBrainzClient) getWithRetry(path string) ([]byte, error) {
 	var result []byte
 	var err error
 
-	retryErr := RetryWithBackoffForHTTP(
+	retryErr := RetryWithBackoffForHTTPWithDebug(
 		mb.config.MaxRetries,
 		mb.config.InitialDelay,
 		mb.config.MaxDelay,
@@ -115,6 +134,7 @@ func (mb *MusicBrainzClient) getWithRetry(path string) ([]byte, error) {
 			result, err = mb.get(path)
 			return err
 		},
+		mb.debug,
 	)
 
 	if retryErr != nil {
