@@ -351,71 +351,68 @@ var navidromeCmd = &cobra.Command{
 			return
 		}
 
-		if expandNavidrome {
-			colorInfo.Println("Expanding playlist to download full albums...")
-
-			// --- Logic for --expand flag ---
-			uniqueAlbums := make(map[string]SpotifyTrack)
-			for _, track := range spotifyTracks {
-				// Use a consistent key for the map
-				albumKey := strings.ToLower(track.AlbumName + " - " + track.AlbumArtist)
-				if _, exists := uniqueAlbums[albumKey]; !exists {
-					uniqueAlbums[albumKey] = track
+				navidromeClient := NewNavidromeClient(config.NavidromeURL, config.NavidromeUsername, config.NavidromePassword)
+				if err := navidromeClient.Authenticate(); err != nil {
+					colorError.Printf("❌ Failed to authenticate with Navidrome: %v\n", err)
+					return
 				}
-			}
-
-			colorInfo.Printf("Found %d unique albums in the playlist.\n", len(uniqueAlbums))
-
-			for _, track := range uniqueAlbums {
-				albumSearchQuery := track.AlbumName + " - " + track.AlbumArtist
-
-				// Check if the album already exists in Navidrome
-				navidromeAlbum, err := navidromeClient.SearchAlbum(track.AlbumName, track.AlbumArtist)
-				if err != nil {
-					colorWarning.Printf("⚠️ Error searching for album %s in Navidrome: %v\n", albumSearchQuery, err)
-				} else if navidromeAlbum != nil {
-					colorSuccess.Printf("✅ Album '%s' already exists in Navidrome, skipping download.\n", albumSearchQuery)
-					continue
-				}
-
-				colorInfo.Printf("Searching for album: %s\n", albumSearchQuery)
-
-				// Use handleSearch to find the album on DAB
-				selectedItems, itemTypes, err := handleSearch(context.Background(), api, albumSearchQuery, "album", debug, auto)
-				if err != nil {
-					colorError.Printf("❌ Search failed for album '%s': %v\n", albumSearchQuery, err)
-					continue // Move to the next album
-				}
-
-				if len(selectedItems) == 0 {
-					colorWarning.Printf("⚠️ No results found for album: %s\n", albumSearchQuery)
-					continue
-				}
-
-				// Download the first result (or the one selected by the user)
-				for i, selectedItem := range selectedItems {
-					if itemTypes[i] == "album" {
-						album := selectedItem.(Album)
-						colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
-						if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil, nil); err != nil {
-							colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
-						} else {
-							colorSuccess.Println("✅ Album download completed for", album.Title)
+		
+				if expandNavidrome {
+					colorInfo.Println("Expanding playlist to download full albums...")
+		
+					// --- Logic for --expand flag ---
+					uniqueAlbums := make(map[string]SpotifyTrack)
+					for _, track := range spotifyTracks {
+						// Use a consistent key for the map
+						albumKey := strings.ToLower(track.AlbumName + " - " + track.AlbumArtist)
+						if _, exists := uniqueAlbums[albumKey]; !exists {
+							uniqueAlbums[albumKey] = track
 						}
-						break // Only download the first album result for this search
 					}
+		
+					colorInfo.Printf("Found %d unique albums in the playlist.\n", len(uniqueAlbums))
+		
+					for _, track := range uniqueAlbums {
+						albumSearchQuery := track.AlbumName + " - " + track.AlbumArtist
+		
+						colorInfo.Printf("Searching for album '%s' by '%s' in Navidrome...", track.AlbumName, track.AlbumArtist)
+						navidromeAlbum, err := navidromeClient.SearchAlbum(track.AlbumName, track.AlbumArtist)
+						if err != nil {
+							colorWarning.Printf("⚠️ Error searching for album %s in Navidrome: %v\n", albumSearchQuery, err)
+						} else if navidromeAlbum != nil {
+							colorSuccess.Printf("✅ Album '%s' already exists in Navidrome, skipping download.\n", albumSearchQuery)
+							continue // Skip to the next album
+						}
+						colorInfo.Printf("Searching for album: %s\n", albumSearchQuery)
+		
+						// Use handleSearch to find the album on DAB
+						selectedItems, itemTypes, err := handleSearch(context.Background(), api, albumSearchQuery, "album", debug, auto)
+						if err != nil {
+							colorError.Printf("❌ Search failed for album '%s': %v\n", albumSearchQuery, err)
+							continue // Move to the next album
+						}
+		
+						if len(selectedItems) == 0 {
+							colorWarning.Printf("⚠️ No results found for album: %s\n", albumSearchQuery)
+							continue
+						}
+		
+						// Download the first result (or the one selected by the user)
+						for i, selectedItem := range selectedItems {
+							if itemTypes[i] == "album" {
+								album := selectedItem.(Album)
+								colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
+								if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil, nil); err != nil {
+									colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
+								} else {
+									colorSuccess.Println("✅ Album download completed for", album.Title)
+								}
+								break // Only download the first album result for this search
+							}
+						}
+					}
+					// --- End of logic for --expand flag ---
 				}
-			}
-			// --- End of logic for --expand flag ---
-		}
-
-
-		navidromeClient := NewNavidromeClient(config.NavidromeURL, config.NavidromeUsername, config.NavidromePassword)
-		if err := navidromeClient.Authenticate(); err != nil {
-			colorError.Printf("❌ Failed to authenticate with Navidrome: %v\n", err)
-			return
-		}
-
 		playlistName := GetUserInput("Enter a name for the new Navidrome playlist", spotifyName) // MODIFIED
 		if err := navidromeClient.CreatePlaylist(playlistName); err != nil {
 			colorError.Printf("❌ Failed to create Navidrome playlist: %v\n", err)
