@@ -72,7 +72,7 @@
 
 💬 **Need Help?** Join our [Discord Support Group](https://discord.gg/q9RnuVza2) for instant community support and the latest stability updates!
 
-**👤 Solo Developer Project:** This tool is developed and maintained by a single developer. While I work hard to push frequent updates and fixes (often multiple commits per day), expect some instability as I can't test every scenario across all systems.
+
 
 ## ✨ Key Features
 
@@ -528,14 +528,14 @@ dab-downloader/
 └── docker-compose.yml   # Container setup
 ```
 
-## 🤝 Contributing
+🤝 Contributing
 
 I especially welcome contributions during this unstable development phase:
 
-1. **🐛 Report bugs** - Even small issues help me stabilize faster
-2. **💡 Test features** - Help me catch breaking changes early  
-3. **🔧 Submit PRs** - Fixes for stability issues are prioritized
-4. **📖 Improve docs** - Help other users navigate the instability
+1.  **🐛 Report bugs** - Even small issues help me stabilize faster
+2.  **💡 Test features** - Help me catch breaking changes early  
+3.  **🔧 Submit PRs** - Fixes for stability issues are prioritized
+4.  **📖 Improve docs** - Help other users navigate the instability
 
 ### Development Areas Needing Help
 
@@ -545,32 +545,41 @@ I especially welcome contributions during this unstable development phase:
 - **Downloads** (`downloader.go`) - Improve robustness and error recovery
 - **Cross-platform Testing** - Help me ensure updates work across different systems
 
+## 💖 Contributors
+
+A huge thank you to all the amazing people who have contributed to this project and helped make it better! Your contributions are greatly appreciated.
+
+- **[NimbleAINinja](https://github.com/NimbleAINinja)**: For their outstanding work on the warning collector, MusicBrainz optimizations, and retroactive metadata updates.
+
+If you've contributed to the project and your name is missing, please feel free to add it!
+
+
+
 ## ⚖️ Legal Notice
 
 This software is provided for **educational purposes only**. Users are responsible for:
 
 - ✅ Complying with all applicable laws
-- ✅ Respecting terms of service
-- ✅ Only downloading content you legally own or have permission to access
+- ✅ Respecting the terms of service of any third-party services used with this tool
+- ✅ Only downloading content they legally own or have permission to access
 
-**Note:** The unstable nature of this software means it should not be relied upon for any critical or commercial purposes.
+The developers and contributors of this project do not endorse piracy or any form of copyright infringement.
 
 ## 📄 License
 
-This project is provided under an educational license. See the [LICENSE](LICENSE) file for details.
+This project is open-source and available under the [MIT License](LICENSE). See the [LICENSE](LICENSE) file for more details.
 
 ## 🌟 Support the Project
 
-If you're willing to help us through the unstable development phase:
+If you find this project useful and want to support its development, here are a few ways you can help:
 
 - ⭐ Star this repository
-- 🐛 Report issues and bugs (even small ones!)
-- 💡 Test new features and report what breaks
-- 🤝 Contribute stability fixes
+- 🐛 Report issues and bugs
+- 💡 Suggest new features
+- 🤝 Contribute to the codebase
 - 💬 Join our [Discord community](https://discord.gg/q9RnuVza2) and help other users
-- 🔄 Help spread awareness about the need for frequent updates
 
-**Your patience and feedback during this development phase is invaluable to a solo developer! 🙏**
+Your support and feedback are invaluable to the project's growth and improvement! 🙏
 
 ---
 
