@@ -9,11 +9,13 @@ WORKDIR /app
 # Copy go.mod and go.sum and download dependencies
 COPY go.mod .
 COPY go.sum .
-RUN go mod tidy
-RUN go mod download
 
 # Copy the rest of the application source code
 COPY . .
+
+# Download dependencies and tidy go.mod/go.sum
+RUN go mod tidy
+RUN go mod download
 
 # Build the application
 # CGO_ENABLED=0 is important for static linking, making the binary self-contained
