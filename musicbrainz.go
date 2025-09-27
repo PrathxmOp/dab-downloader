@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context" // Add this import
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -32,21 +36,15 @@ func DefaultMusicBrainzConfig() MusicBrainzConfig {
 
 // MusicBrainzClient for making requests to the MusicBrainz API
 type MusicBrainzClient struct {
-	client *http.Client
-	config MusicBrainzConfig
-	debug  bool
+	client      *http.Client
+	config      MusicBrainzConfig
+	debug       bool
+	rateLimiter *rate.Limiter
+	baseURL     string // Add this field
 }
 
-// NewMusicBrainzClient creates a new MusicBrainz API client with default retry configuration
-func NewMusicBrainzClient() *MusicBrainzClient {
-	return &MusicBrainzClient{
-		client: &http.Client{
-			Timeout: 30 * time.Second, // MusicBrainz API can be slow
-		},
-		config: DefaultMusicBrainzConfig(),
-		debug:  false,
-	}
-}
+
+
 
 // NewMusicBrainzClientWithConfig creates a new MusicBrainz API client with custom retry configuration
 func NewMusicBrainzClientWithConfig(config MusicBrainzConfig) *MusicBrainzClient {
@@ -56,6 +54,8 @@ func NewMusicBrainzClientWithConfig(config MusicBrainzConfig) *MusicBrainzClient
 		},
 		config: config,
 		debug:  false,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
+		baseURL: musicBrainzAPI,
 	}
 }
 
@@ -67,6 +67,8 @@ func NewMusicBrainzClientWithDebug(debug bool) *MusicBrainzClient {
 		},
 		config: DefaultMusicBrainzConfig(),
 		debug:  debug,
+		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
+		baseURL: musicBrainzAPI,
 	}
 }
 
@@ -87,34 +89,73 @@ func (mb *MusicBrainzClient) SetDebug(debug bool) {
 
 // get makes a GET request to the MusicBrainz API (internal method without retry)
 func (mb *MusicBrainzClient) get(path string) ([]byte, error) {
-	req, err := http.NewRequest("GET", musicBrainzAPI+path, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("User-Agent", musicBrainzUserAgent)
-	req.Header.Set("Accept", "application/json")
+	var finalResp *http.Response // This will hold the successful response
+	var err error
 
-	resp, err := mb.client.Do(req)
+	// Construct the full URL for the MusicBrainz API request
+	reqURL, err := url.Parse(mb.baseURL + path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, fmt.Errorf("failed to parse MusicBrainz API URL: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	// Wait for the rate limiter
+	mb.rateLimiter.Wait(context.Background())
+
+	err = RetryWithBackoffForHTTPWithDebug(
+		mb.config.MaxRetries,    // maxRetries from client config
+		mb.config.InitialDelay,  // initialDelay from client config
+		mb.config.MaxDelay,      // maxDelay from client config
+		func() error {
+			req, err := http.NewRequest("GET", reqURL.String(), nil)
+			if err != nil {
+				return fmt.Errorf("failed to create request: %w", err)
+			}
+			req.Header.Set("User-Agent", musicBrainzUserAgent)
+			req.Header.Set("Accept", "application/json")
+
+			resp, err := mb.client.Do(req) // Use mb.client
+			if err != nil {
+				// Check for network-related errors that are not HTTP errors
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					return &HTTPError{StatusCode: http.StatusGatewayTimeout, Status: "Gateway Timeout", Message: err.Error()}
+				}
+				return err // Non-retryable network error or other error
+			}
+
+			// If the status code is retryable, return an HTTPError
+			if IsRetryableHTTPError(&HTTPError{StatusCode: resp.StatusCode}) {
+				// Close the body of the retryable response to prevent resource leaks
+				resp.Body.Close()
+				return &HTTPError{StatusCode: resp.StatusCode, Status: resp.Status, Message: "Retryable HTTP error"}
+			}
+
+			finalResp = resp // Assign the successful response to the outer variable
+			return nil       // Success or non-retryable HTTP error
+		},
+		mb.debug, // Use client's debug setting
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform request after retries: %w", err)
+	}
+
+	defer finalResp.Body.Close()
+
+	if finalResp.StatusCode != http.StatusOK {
 		// Create structured HTTP error for retry logic
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := ioutil.ReadAll(finalResp.Body)
 		message := string(body)
 		if len(message) > 200 {
 			message = message[:200] + "..."
 		}
 		return nil, &HTTPError{
-			StatusCode: resp.StatusCode,
-			Status:     resp.Status,
+			StatusCode: finalResp.StatusCode,
+			Status:     finalResp.Status,
 			Message:    message,
 		}
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(finalResp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}

@@ -10,7 +10,7 @@ import (
 	
 )
 
-var mbClient = NewMusicBrainzClient() // Global instance of MusicBrainzClient
+var mbClient = NewMusicBrainzClientWithDebug(false) // Global instance of MusicBrainzClient
 
 // SetMusicBrainzDebug sets debug mode for the global MusicBrainz client
 func SetMusicBrainzDebug(debug bool) {

@@ -21,13 +21,22 @@ func (e *HTTPError) Error() string {
 
 // IsRetryableHTTPError checks if an HTTP error should be retried
 func IsRetryableHTTPError(err error) bool {
-	if httpErr, ok := err.(*HTTPError); ok {
-		switch httpErr.StatusCode {
-		case http.StatusServiceUnavailable, // 503
-			http.StatusTooManyRequests,     // 429
-			http.StatusBadGateway,          // 502
-			http.StatusGatewayTimeout:      // 504
-			return true
+	// Unwrap the error if it's wrapped
+	for err != nil {
+		if httpErr, ok := err.(*HTTPError); ok {
+			switch httpErr.StatusCode {
+			case http.StatusServiceUnavailable, // 503
+				http.StatusTooManyRequests,     // 429
+				http.StatusBadGateway,          // 502
+				http.StatusGatewayTimeout:      // 504
+				return true
+			}
+		}
+		// Try to unwrap the error further
+		if unwrapped, ok := err.(interface{ Unwrap() error }); ok {
+			err = unwrapped.Unwrap()
+		} else {
+			break
 		}
 	}
 	return false
@@ -58,9 +67,12 @@ func RetryWithBackoffForHTTP(maxRetries int, initialDelay time.Duration, maxDela
 // RetryWithBackoffForHTTPWithDebug retries HTTP requests with smart error handling and optional debug logging
 func RetryWithBackoffForHTTPWithDebug(maxRetries int, initialDelay time.Duration, maxDelay time.Duration, fn func() error, debug bool) error {
 	var lastErr error
-	
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		lastErr = fn()
+
+	if maxRetries == 0 { // If no retries, just execute once
+		return fn()
+	}
+
+	for attempt := 0; attempt < maxRetries; attempt++ {		lastErr = fn()
 		if lastErr == nil {
 			return nil
 		}
