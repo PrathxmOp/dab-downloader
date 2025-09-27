@@ -368,6 +368,16 @@ var navidromeCmd = &cobra.Command{
 
 			for _, track := range uniqueAlbums {
 				albumSearchQuery := track.AlbumName + " - " + track.AlbumArtist
+
+				// Check if the album already exists in Navidrome
+				navidromeAlbum, err := navidromeClient.SearchAlbum(track.AlbumName, track.AlbumArtist)
+				if err != nil {
+					colorWarning.Printf("⚠️ Error searching for album %s in Navidrome: %v\n", albumSearchQuery, err)
+				} else if navidromeAlbum != nil {
+					colorSuccess.Printf("✅ Album '%s' already exists in Navidrome, skipping download.\n", albumSearchQuery)
+					continue
+				}
+
 				colorInfo.Printf("Searching for album: %s\n", albumSearchQuery)
 
 				// Use handleSearch to find the album on DAB
