@@ -213,6 +213,29 @@ func (mb *MusicBrainzClient) GetReleaseMetadata(mbid string) (*MusicBrainzReleas
 	return &release, nil
 }
 
+// SearchTrackByISRC searches for a track on MusicBrainz using ISRC
+func (mb *MusicBrainzClient) SearchTrackByISRC(isrc string) (*MusicBrainzTrack, error) {
+	query := fmt.Sprintf("isrc:\"%s\"", isrc)
+	path := fmt.Sprintf("recording?query=%s&limit=1", url.QueryEscape(query))
+	body, err := mb.getWithRetry(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var searchResult struct {
+		Recordings []MusicBrainzTrack `json:"recordings"`
+	}
+	if err := json.Unmarshal(body, &searchResult); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal MusicBrainz ISRC search result: %w", err)
+	}
+
+	if len(searchResult.Recordings) > 0 {
+		return &searchResult.Recordings[0], nil
+	}
+
+	return nil, fmt.Errorf("no track found on MusicBrainz for ISRC: %s", isrc)
+}
+
 // SearchTrack searches for a track on MusicBrainz
 func (mb *MusicBrainzClient) SearchTrack(artist, album, title string) (*MusicBrainzTrack, error) {
 	query := fmt.Sprintf("artist:\"%s\" AND release:\"%s\" AND recording:\"%s\"", artist, album, title)

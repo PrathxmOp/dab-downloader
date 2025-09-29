@@ -92,6 +92,18 @@ func TestMusicBrainzClientDirectly(t *testing.T) {
 		t.Logf("Release Group ID: %s", release.ReleaseGroup.ID)
 	}
 
+	// Test ISRC search with a known ISRC
+	t.Log("Testing ISRC-based search...")
+	isrcTrack, err := mbClient.SearchTrackByISRC("GBUM71505078") // Bohemian Rhapsody ISRC
+	if err != nil {
+		t.Logf("ISRC search failed (this might be expected): %v", err)
+	} else {
+		t.Logf("Found track by ISRC: ID=%s, Title=%s", isrcTrack.ID, isrcTrack.Title)
+		if len(isrcTrack.ArtistCredit) > 0 {
+			t.Logf("Artist: ID=%s, Name=%s", isrcTrack.ArtistCredit[0].Artist.ID, isrcTrack.ArtistCredit[0].Artist.Name)
+		}
+	}
+
 	// Add a small delay to respect MusicBrainz rate limiting
 	time.Sleep(2 * time.Second)
 }
@@ -107,4 +119,76 @@ func TestCacheOperations(t *testing.T) {
 	}
 
 	t.Logf("Cache is empty as expected: %d items, keys: %v", count, keys)
+}
+
+func TestISRCPrioritySearch(t *testing.T) {
+	// Enable debug mode for this test
+	SetMusicBrainzDebug(true)
+	defer SetMusicBrainzDebug(false)
+
+	t.Log("Testing ISRC priority in metadata search...")
+
+	// Test track with ISRC - should use ISRC search first
+	trackWithISRC := shared.Track{
+		Title:       "Bohemian Rhapsody",
+		Artist:      "Queen",
+		Album:       "A Night at the Opera",
+		ISRC:        "GBUM71505078", // Known ISRC for Bohemian Rhapsody
+		TrackNumber: 1,
+		Duration:    355000,
+	}
+
+	// Test track without ISRC - should use traditional search
+	trackWithoutISRC := shared.Track{
+		Title:       "Bohemian Rhapsody",
+		Artist:      "Queen",
+		Album:       "A Night at the Opera",
+		TrackNumber: 1,
+		Duration:    355000,
+	}
+
+	album := &shared.Album{
+		Title:       "A Night at the Opera",
+		Artist:      "Queen",
+		ReleaseDate: "1975-11-21",
+		TotalTracks: 12,
+	}
+
+	warningCollector := shared.NewWarningCollector(true)
+
+	// Create temporary FLAC files for testing
+	tempDir := t.TempDir()
+	
+	testFileWithISRC := filepath.Join(tempDir, "test_with_isrc.flac")
+	testFileWithoutISRC := filepath.Join(tempDir, "test_without_isrc.flac")
+	
+	// Create minimal FLAC files
+	if err := os.WriteFile(testFileWithISRC, []byte("fLaC"), 0644); err != nil {
+		t.Fatalf("Failed to create test file with ISRC: %v", err)
+	}
+	if err := os.WriteFile(testFileWithoutISRC, []byte("fLaC"), 0644); err != nil {
+		t.Fatalf("Failed to create test file without ISRC: %v", err)
+	}
+
+	// Test with ISRC
+	t.Log("Testing metadata addition with ISRC...")
+	err := AddMetadataWithDebug(testFileWithISRC, trackWithISRC, album, nil, 12, warningCollector, true)
+	if err != nil {
+		t.Logf("Expected error due to invalid FLAC file (with ISRC): %v", err)
+	}
+
+	// Test without ISRC
+	t.Log("Testing metadata addition without ISRC...")
+	err = AddMetadataWithDebug(testFileWithoutISRC, trackWithoutISRC, album, nil, 12, warningCollector, true)
+	if err != nil {
+		t.Logf("Expected error due to invalid FLAC file (without ISRC): %v", err)
+	}
+
+	// Check warnings
+	warningCount := warningCollector.GetWarningCount()
+	t.Logf("Total warnings collected: %d", warningCount)
+	
+	if warningCollector.HasWarnings() {
+		warningCollector.PrintSummary()
+	}
 }

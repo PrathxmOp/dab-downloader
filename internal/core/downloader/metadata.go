@@ -254,8 +254,22 @@ func getGenre(track shared.Track, album *shared.Album) string {
 
 // addMusicBrainzMetadata handles optimized MusicBrainz metadata fetching with caching
 func addMusicBrainzMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track, album *shared.Album, albumTitle string, warningCollector *shared.WarningCollector) {
-	// Fetch track-specific metadata
-	mbTrack, err := mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
+	// Fetch track-specific metadata - try ISRC first if available
+	var mbTrack *musicbrainz.MusicBrainzTrack
+	var err error
+	
+	if track.ISRC != "" {
+		// Try ISRC search first - this is more accurate
+		mbTrack, err = mbClient.SearchTrackByISRC(track.ISRC)
+		if err != nil {
+			// ISRC search failed, fall back to traditional search
+			mbTrack, err = mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
+		}
+	} else {
+		// No ISRC available, use traditional search
+		mbTrack, err = mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
+	}
+	
 	if err != nil {
 		if warningCollector != nil {
 			warningCollector.AddMusicBrainzTrackWarning(track.Artist, track.Title, err.Error())
