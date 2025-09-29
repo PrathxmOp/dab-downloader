@@ -43,6 +43,9 @@ type DownloadService interface {
 	// DownloadTrack downloads a single track by ID
 	DownloadTrack(ctx context.Context, trackID string, config *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error)
 	
+	// DownloadTrackDirect downloads a track using the track data directly (bypassing GetTrack API call)
+	DownloadTrackDirect(ctx context.Context, track shared.Track, config *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error)
+	
 	// DownloadTracks downloads multiple tracks
 	DownloadTracks(ctx context.Context, tracks []shared.Track, album *shared.Album, config *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error)
 }

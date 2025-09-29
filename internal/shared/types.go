@@ -21,6 +21,7 @@ type Track struct {
 	ReleaseDate   string      `json:"releaseDate"`
 	Duration      int         `json:"duration"`
 	Album         string      `json:"album,omitempty"`
+	AlbumTitle    string      `json:"albumTitle,omitempty"`  // For search results
 	AlbumArtist   string      `json:"albumArtist,omitempty"`
 	Genre         string      `json:"genre,omitempty"`
 	TrackNumber   int         `json:"trackNumber,omitempty"`

@@ -289,10 +289,12 @@ func (api *DabAPI) GetArtist(ctx context.Context, artistID string, config *confi
 
 // GetTrack retrieves track information
 func (api *DabAPI) GetTrack(ctx context.Context, trackID string) (*shared.Track, error) {
+	fmt.Printf("DEBUG - GetTrack called with trackID: '%s'\n", trackID)
 	resp, err := api.Request(ctx, "api/track", true, []shared.QueryParam{
 		{Name: "trackId", Value: trackID},
 	})
 	if err != nil {
+		fmt.Printf("DEBUG - GetTrack API request failed: %v\n", err)
 		return nil, fmt.Errorf("failed to get track: %w", err)
 	}
 	defer resp.Body.Close()

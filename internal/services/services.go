@@ -212,6 +212,7 @@ func (ds *DownloadService) DownloadArtist(ctx context.Context, artistID string, 
 }
 
 func (ds *DownloadService) DownloadTrack(ctx context.Context, trackID string, cfg *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error) {
+	fmt.Printf("DEBUG - DownloadTrack called with trackID: '%s'\n", trackID)
 	// Get track information
 	track, err := ds.apiClient.GetTrack(ctx, trackID)
 	if err != nil {
@@ -227,6 +228,37 @@ func (ds *DownloadService) DownloadTrack(ctx context.Context, trackID string, cf
 	}
 	
 	return ds.DownloadTracks(ctx, []shared.Track{*track}, album, cfg, debug, format, bitrate)
+}
+
+// DownloadTrackDirect downloads a track using the track data directly (bypassing GetTrack API call)
+func (ds *DownloadService) DownloadTrackDirect(ctx context.Context, track shared.Track, cfg *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error) {
+	fmt.Printf("DEBUG - DownloadTrackDirect called with track: '%s' by '%s'\n", track.Title, track.Artist)
+	
+	// Determine the album title - prefer AlbumTitle from search results, fallback to Album
+	albumTitle := track.AlbumTitle
+	if albumTitle == "" {
+		albumTitle = track.Album
+	}
+	
+	// Determine the album artist - use the track artist if AlbumArtist is empty
+	albumArtist := track.AlbumArtist
+	if albumArtist == "" {
+		albumArtist = track.Artist
+	}
+	
+	// Create a minimal album for the track using available data
+	album := &shared.Album{
+		ID:     track.AlbumID,
+		Title:  albumTitle,
+		Artist: albumArtist,
+		Tracks: []shared.Track{track},
+	}
+	
+	if debug {
+		fmt.Printf("DEBUG - Created album: ID='%s', Title='%s', Artist='%s'\n", album.ID, album.Title, album.Artist)
+	}
+	
+	return ds.DownloadTracks(ctx, []shared.Track{track}, album, cfg, debug, format, bitrate)
 }
 
 func (ds *DownloadService) DownloadTracks(ctx context.Context, tracks []shared.Track, album *shared.Album, cfg *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error) {
@@ -263,7 +295,7 @@ func (ds *DownloadService) DownloadTracks(ctx context.Context, tracks []shared.T
 		}
 		
 		stats.SuccessCount++
-		ds.logger.Success("Downloaded: %s", track.Title)
+		// Success message is logged by the calling command
 	}
 	
 	return stats, nil
@@ -521,9 +553,7 @@ func (cl *ConsoleLogger) Error(message string, args ...interface{}) {
 }
 
 func (cl *ConsoleLogger) Debug(message string, args ...interface{}) {
-	if cl.debugMode {
-		fmt.Printf("🐛 DEBUG: "+message+"\n", args...)
-	}
+	fmt.Printf("🐛 DEBUG: "+message+"\n", args...)
 }
 
 func (cl *ConsoleLogger) Success(message string, args ...interface{}) {
