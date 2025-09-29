@@ -124,6 +124,9 @@ type FileSystemService interface {
 	// GetDownloadPath constructs the full download path for a track
 	GetDownloadPath(artist, album, track string, format string, config *config.Config) string
 	
+	// GetDownloadPathWithTrack constructs the full download path using naming masks and track metadata
+	GetDownloadPathWithTrack(track shared.Track, album *shared.Album, format string, config *config.Config) string
+	
 	// FileExists checks if a file exists
 	FileExists(path string) bool
 	

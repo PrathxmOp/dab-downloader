@@ -117,7 +117,7 @@ func (cs *ConfigService) ValidateConfig(cfg *config.Config) error {
 }
 
 func (cs *ConfigService) GetDefaultConfig() *config.Config {
-	return &config.Config{
+	cfg := &config.Config{
 		APIURL:           "https://api.dab.com",
 		DownloadLocation: "./downloads",
 		Parallelism:      3,
@@ -127,6 +127,9 @@ func (cs *ConfigService) GetDefaultConfig() *config.Config {
 		MaxRetryAttempts: 3,
 		WarningBehavior:  "display",
 	}
+	// Apply default naming masks
+	cfg.ApplyDefaultNamingMasks()
+	return cfg
 }
 
 func (cs *ConfigService) EnsureConfigExists(configFile string) error {
@@ -276,7 +279,8 @@ func (ds *DownloadService) DownloadTracks(ctx context.Context, tracks []shared.T
 	
 	// Download each track
 	for _, track := range tracks {
-		outputPath := ds.fileSystem.GetDownloadPath(track.Artist, track.Album, track.Title, format, cfg)
+		// Use the new method that supports naming masks
+		outputPath := ds.fileSystem.(*FileSystemService).GetDownloadPathWithTrack(track, album, format, cfg)
 		
 		// Check if file already exists
 		if ds.fileSystem.FileExists(outputPath) {
@@ -478,18 +482,25 @@ func (fss *FileSystemService) EnsureDirectoryExists(path string) error {
 }
 
 func (fss *FileSystemService) GetDownloadPath(artist, album, track string, format string, cfg *config.Config) string {
-	// Sanitize filenames
-	artist = fss.SanitizeFileName(artist)
-	album = fss.SanitizeFileName(album)
-	track = fss.SanitizeFileName(track)
-	
 	// Determine file extension
 	ext := ".flac"
 	if format != "flac" {
 		ext = "." + format
 	}
 	
-	// Build path
+	// Use naming masks if configured, otherwise fall back to default structure
+	if cfg.NamingMasks.FileMask != "" {
+		// For now, use a simple filename structure - this would need track metadata
+		trackFileName := fss.SanitizeFileName(track) + ext
+		albumDir := filepath.Join(cfg.DownloadLocation, fss.SanitizeFileName(artist), fss.SanitizeFileName(album))
+		return filepath.Join(albumDir, trackFileName)
+	}
+	
+	// Default structure (legacy)
+	artist = fss.SanitizeFileName(artist)
+	album = fss.SanitizeFileName(album)
+	track = fss.SanitizeFileName(track)
+	
 	artistDir := filepath.Join(cfg.DownloadLocation, artist)
 	albumDir := filepath.Join(artistDir, album)
 	trackFileName := track + ext
@@ -529,6 +540,85 @@ func (fss *FileSystemService) ValidateDownloadLocation(path string) error {
 
 func (fss *FileSystemService) SanitizeFileName(filename string) string {
 	return shared.SanitizeFileName(filename)
+}
+
+// ProcessNamingMask processes a naming mask template with track/album data
+func (fss *FileSystemService) ProcessNamingMask(mask string, track shared.Track, album *shared.Album) string {
+	if mask == "" {
+		return ""
+	}
+	
+	result := mask
+	
+	// Replace track-specific placeholders
+	result = strings.ReplaceAll(result, "{title}", track.Title)
+	result = strings.ReplaceAll(result, "{artist}", track.Artist)
+	result = strings.ReplaceAll(result, "{track_number}", fmt.Sprintf("%02d", track.TrackNumber))
+	
+	// Replace album-specific placeholders
+	if album != nil {
+		result = strings.ReplaceAll(result, "{album}", album.Title)
+		result = strings.ReplaceAll(result, "{year}", album.Year)
+		result = strings.ReplaceAll(result, "{album_artist}", album.Artist)
+	}
+	
+	return result
+}
+
+// ProcessNamingMaskForFile processes a naming mask for a filename (sanitizes the result)
+func (fss *FileSystemService) ProcessNamingMaskForFile(mask string, track shared.Track, album *shared.Album) string {
+	result := fss.ProcessNamingMask(mask, track, album)
+	return fss.SanitizeFileName(result)
+}
+
+// ProcessNamingMaskForFolder processes a naming mask for a folder path (sanitizes each component separately)
+func (fss *FileSystemService) ProcessNamingMaskForFolder(mask string, track shared.Track, album *shared.Album) string {
+	result := fss.ProcessNamingMask(mask, track, album)
+	
+	// Split by path separator and sanitize each component
+	parts := strings.Split(result, "/")
+	for i, part := range parts {
+		parts[i] = fss.SanitizeFileName(part)
+	}
+	
+	return strings.Join(parts, "/")
+}
+
+// GetDownloadPathWithTrack generates the full download path using naming masks and track metadata
+func (fss *FileSystemService) GetDownloadPathWithTrack(track shared.Track, album *shared.Album, format string, cfg *config.Config) string {
+	// Determine file extension
+	ext := ".flac"
+	if format != "flac" {
+		ext = "." + format
+	}
+	
+	// Apply default naming masks if they're empty
+	cfg.ApplyDefaultNamingMasks()
+	
+	// Process file mask (now guaranteed to have a value)
+	fileName := fss.ProcessNamingMaskForFile(cfg.NamingMasks.FileMask, track, album) + ext
+	
+	// Determine folder mask based on album type
+	var folderMask string
+	if album != nil {
+		switch strings.ToLower(album.Type) {
+		case "ep":
+			folderMask = cfg.NamingMasks.EpFolderMask
+		case "single":
+			folderMask = cfg.NamingMasks.SingleFolderMask
+		default:
+			folderMask = cfg.NamingMasks.AlbumFolderMask
+		}
+	}
+	
+	// Use album folder mask as fallback
+	if folderMask == "" {
+		folderMask = cfg.NamingMasks.AlbumFolderMask
+	}
+	
+	// Process folder mask (now guaranteed to have a value)
+	folderPath := fss.ProcessNamingMaskForFolder(folderMask, track, album)
+	return filepath.Join(cfg.DownloadLocation, folderPath, fileName)
 }
 
 // ConsoleLogger implementation

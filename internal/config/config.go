@@ -23,6 +23,34 @@ type NamingOptions struct {
 	FileMask         string `json:"file_mask"`
 }
 
+// GetDefaultNamingMasks returns the default naming masks
+func GetDefaultNamingMasks() NamingOptions {
+	return NamingOptions{
+		AlbumFolderMask:  "{artist}/{artist} - {album} ({year})",
+		EpFolderMask:     "{artist}/EPs/{artist} - {album} ({year})",
+		SingleFolderMask: "{artist}/Singles/{artist} - {album} ({year})",
+		FileMask:         "{track_number} - {artist} - {title}",
+	}
+}
+
+// ApplyDefaultNamingMasks applies default naming masks to empty fields
+func (cfg *Config) ApplyDefaultNamingMasks() {
+	defaults := GetDefaultNamingMasks()
+	
+	if cfg.NamingMasks.AlbumFolderMask == "" {
+		cfg.NamingMasks.AlbumFolderMask = defaults.AlbumFolderMask
+	}
+	if cfg.NamingMasks.EpFolderMask == "" {
+		cfg.NamingMasks.EpFolderMask = defaults.EpFolderMask
+	}
+	if cfg.NamingMasks.SingleFolderMask == "" {
+		cfg.NamingMasks.SingleFolderMask = defaults.SingleFolderMask
+	}
+	if cfg.NamingMasks.FileMask == "" {
+		cfg.NamingMasks.FileMask = defaults.FileMask
+	}
+}
+
 // Configuration structure
 type Config struct {
 	APIURL              string        `json:"APIURL"`

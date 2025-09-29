@@ -115,6 +115,109 @@ func TestFileSystemService(t *testing.T) {
 	}
 }
 
+func TestNamingMasks(t *testing.T) {
+	cfg := &config.Config{
+		DownloadLocation: "./test-downloads",
+		NamingMasks: config.NamingOptions{
+			AlbumFolderMask: "{artist}/{artist} - {album} ({year})",
+			FileMask:        "{track_number} - {artist} - {title}",
+		},
+	}
+
+	fss := NewFileSystemService(cfg)
+
+	// Test track data
+	track := shared.Track{
+		Title:       "Test Song",
+		Artist:      "Test Artist",
+		TrackNumber: 5,
+		Album:       "Test Album",
+	}
+
+	album := &shared.Album{
+		Title:  "Test Album",
+		Artist: "Test Artist",
+		Year:   "2023",
+		Type:   "album",
+	}
+
+	// Test naming mask processing
+	fileName := fss.ProcessNamingMaskForFile(cfg.NamingMasks.FileMask, track, album)
+	expected := "05 - Test Artist - Test Song"
+	if fileName != expected {
+		t.Errorf("Expected filename '%s', got '%s'", expected, fileName)
+	}
+
+	folderPath := fss.ProcessNamingMaskForFolder(cfg.NamingMasks.AlbumFolderMask, track, album)
+	expectedFolder := "Test Artist/Test Artist - Test Album (2023)"
+	if folderPath != expectedFolder {
+		t.Errorf("Expected folder path '%s', got '%s'", expectedFolder, folderPath)
+	}
+
+	// Test full path generation with naming masks
+	fullPath := fss.GetDownloadPathWithTrack(track, album, "flac", cfg)
+	expectedPath := "test-downloads/Test Artist/Test Artist - Test Album (2023)/05 - Test Artist - Test Song.flac"
+	if fullPath != expectedPath {
+		t.Errorf("Expected full path '%s', got '%s'", expectedPath, fullPath)
+	}
+}
+
+func TestDefaultNamingMasks(t *testing.T) {
+	// Test config with empty naming masks
+	cfg := &config.Config{
+		DownloadLocation: "./test-downloads",
+		NamingMasks:      config.NamingOptions{}, // Empty naming masks
+	}
+
+	fss := NewFileSystemService(cfg)
+
+	// Test track data
+	track := shared.Track{
+		Title:       "Test Song",
+		Artist:      "Test Artist",
+		TrackNumber: 5,
+		Album:       "Test Album",
+	}
+
+	album := &shared.Album{
+		Title:  "Test Album",
+		Artist: "Test Artist",
+		Year:   "2023",
+		Type:   "album",
+	}
+
+	// Test that default naming masks are applied
+	fullPath := fss.GetDownloadPathWithTrack(track, album, "flac", cfg)
+	expectedPath := "test-downloads/Test Artist/Test Artist - Test Album (2023)/05 - Test Artist - Test Song.flac"
+	if fullPath != expectedPath {
+		t.Errorf("Expected full path with defaults '%s', got '%s'", expectedPath, fullPath)
+	}
+
+	// Verify that the config now has the default masks applied
+	if cfg.NamingMasks.FileMask == "" {
+		t.Error("FileMask should have been set to default value")
+	}
+	if cfg.NamingMasks.AlbumFolderMask == "" {
+		t.Error("AlbumFolderMask should have been set to default value")
+	}
+
+	// Test EP folder mask
+	album.Type = "ep"
+	epPath := fss.GetDownloadPathWithTrack(track, album, "flac", cfg)
+	expectedEpPath := "test-downloads/Test Artist/EPs/Test Artist - Test Album (2023)/05 - Test Artist - Test Song.flac"
+	if epPath != expectedEpPath {
+		t.Errorf("Expected EP path '%s', got '%s'", expectedEpPath, epPath)
+	}
+
+	// Test single folder mask
+	album.Type = "single"
+	singlePath := fss.GetDownloadPathWithTrack(track, album, "flac", cfg)
+	expectedSinglePath := "test-downloads/Test Artist/Singles/Test Artist - Test Album (2023)/05 - Test Artist - Test Song.flac"
+	if singlePath != expectedSinglePath {
+		t.Errorf("Expected single path '%s', got '%s'", expectedSinglePath, singlePath)
+	}
+}
+
 func TestConsoleLogger(t *testing.T) {
 	logger := NewConsoleLogger()
 
