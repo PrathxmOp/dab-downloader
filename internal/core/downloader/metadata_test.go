@@ -70,8 +70,11 @@ func TestMusicBrainzClientDirectly(t *testing.T) {
 
 	t.Log("Testing direct MusicBrainz API calls...")
 
+	// Create a metadata processor for testing
+	processor := NewMetadataProcessor()
+	
 	// Test track search
-	track, err := mbClient.SearchTrack("Queen", "A Night at the Opera", "Bohemian Rhapsody")
+	track, err := processor.mbClient.SearchTrack("Queen", "A Night at the Opera", "Bohemian Rhapsody")
 	if err != nil {
 		t.Logf("Track search failed (this might be expected): %v", err)
 	} else {
@@ -82,7 +85,7 @@ func TestMusicBrainzClientDirectly(t *testing.T) {
 	}
 
 	// Test release search
-	release, err := mbClient.SearchRelease("Queen", "A Night at the Opera")
+	release, err := processor.mbClient.SearchRelease("Queen", "A Night at the Opera")
 	if err != nil {
 		t.Logf("Release search failed (this might be expected): %v", err)
 	} else {
@@ -95,7 +98,7 @@ func TestMusicBrainzClientDirectly(t *testing.T) {
 
 	// Test ISRC search with a known ISRC
 	t.Log("Testing ISRC-based search...")
-	isrcTrack, err := mbClient.SearchTrackByISRC("GBUM71505078") // Bohemian Rhapsody ISRC
+	isrcTrack, err := processor.mbClient.SearchTrackByISRC("GBUM71505078") // Bohemian Rhapsody ISRC
 	if err != nil {
 		t.Logf("ISRC search failed (this might be expected): %v", err)
 	} else {
@@ -223,7 +226,8 @@ func TestFindReleaseIDFromISRC(t *testing.T) {
 	FindReleaseIDFromISRC(tracks, albumArtist, albumTitle)
 	
 	// Check if release ID was cached
-	cachedReleaseID := albumCache.GetCachedReleaseID(albumArtist, albumTitle)
+	processor := NewMetadataProcessor()
+	cachedReleaseID := processor.cache.GetCachedReleaseID(albumArtist, albumTitle)
 	if cachedReleaseID != "" {
 		t.Logf("Successfully found and cached release ID: %s", cachedReleaseID)
 	} else {
@@ -240,8 +244,8 @@ func TestFindReleaseIDFromISRC(t *testing.T) {
 		},
 	}
 	
-	FindReleaseIDFromISRC(tracksNoISRC, "Some Artist", "Some Album")
-	cachedReleaseID2 := albumCache.GetCachedReleaseID("Some Artist", "Some Album")
+	processor.FindReleaseIDFromISRC(tracksNoISRC, "Some Artist", "Some Album")
+	cachedReleaseID2 := processor.cache.GetCachedReleaseID("Some Artist", "Some Album")
 	if cachedReleaseID2 == "" {
 		t.Log("Correctly handled tracks with no ISRC - no release ID cached")
 	} else {
@@ -336,7 +340,8 @@ func TestReleaseSelectionDebug(t *testing.T) {
 	isrc := "GBUM71505078" // High by the Beach - Lana Del Rey
 	
 	// Get the raw MusicBrainz track data to see what releases are available
-	mbTrack, err := mbClient.SearchTrackByISRC(isrc)
+	processor := NewMetadataProcessor()
+	mbTrack, err := processor.mbClient.SearchTrackByISRC(isrc)
 	if err != nil {
 		t.Logf("ISRC search failed: %v", err)
 		return
@@ -359,7 +364,7 @@ func TestReleaseSelectionDebug(t *testing.T) {
 		
 		// Test with track count that should match a specific release
 		for expectedCount := 1; expectedCount <= 15; expectedCount++ {
-			selected := selectBestRelease(mbTrack.Releases, expectedCount)
+			selected := processor.selectBestMBRelease(mbTrack.Releases, expectedCount)
 			totalTracks := 0
 			for _, media := range selected.Media {
 				totalTracks += len(media.Tracks)
@@ -402,7 +407,8 @@ func TestIntelligentReleaseSelection(t *testing.T) {
 			t.Logf("  Release Group ID: %s", metadata.ReleaseGroupID)
 			
 			// Get the release title for context
-			mbTrack, err := mbClient.SearchTrackByISRC("GBUM71505078")
+			processor := NewMetadataProcessor()
+			mbTrack, err := processor.mbClient.SearchTrackByISRC("GBUM71505078")
 			if err == nil {
 				for _, release := range mbTrack.Releases {
 					if release.ID == metadata.ReleaseID {
@@ -423,7 +429,8 @@ func TestDigitalMediaPreference(t *testing.T) {
 	isrc := "GBUM71505078" // High by the Beach - Lana Del Rey
 	
 	// Get the raw MusicBrainz track data to see what formats are available
-	mbTrack, err := mbClient.SearchTrackByISRC(isrc)
+	processor := NewMetadataProcessor()
+	mbTrack, err := processor.mbClient.SearchTrackByISRC(isrc)
 	if err != nil {
 		t.Logf("ISRC search failed: %v", err)
 		return

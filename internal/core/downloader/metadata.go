@@ -13,29 +13,105 @@ import (
 	"dab-downloader/internal/api/musicbrainz"
 )
 
-var mbClient = musicbrainz.NewMusicBrainzClientWithDebug(false) // Global instance of MusicBrainzClient
+// ============================================================================
+// 1. Constants and Types
+// ============================================================================
 
-// SetMusicBrainzDebug sets debug mode for the global MusicBrainz client
-func SetMusicBrainzDebug(debug bool) {
-	mbClient.SetDebug(debug)
+const (
+	DefaultEncoder = "EnhancedFLACDownloader/2.0"
+	DefaultEncoding = "FLAC"
+	DefaultSource = "DAB"
+)
+
+// ISRCMetadata holds comprehensive metadata extracted from ISRC lookup
+type ISRCMetadata struct {
+	ReleaseID        string
+	ReleaseArtistID  string
+	ReleaseGroupID   string
+	TrackID          string
+	TrackArtistID    string
 }
+
+// Release represents a simplified MusicBrainz release for scoring
+type Release struct {
+	ID           string
+	Title        string
+	Date         string
+	ArtistCredit []ArtistCredit
+	ReleaseGroup ReleaseGroup
+	Media        []Media
+}
+
+type ArtistCredit struct {
+	Artist Artist `json:"artist"`
+}
+
+type Artist struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type ReleaseGroup struct {
+	ID string `json:"id"`
+}
+
+type Media struct {
+	Format string `json:"format"`
+	Discs  []Disc `json:"discs"`
+	Tracks []Track `json:"tracks"`
+}
+
+type Disc struct {
+	ID string `json:"id"`
+}
+
+type Track struct {
+	ID     string `json:"id"`
+	Number string `json:"number"`
+	Title  string `json:"title"`
+	Length int    `json:"length"`
+}
+
+// ============================================================================
+// 2. Constructor and Configuration
+// ============================================================================
+
+// MetadataProcessor handles FLAC metadata operations
+type MetadataProcessor struct {
+	mbClient *musicbrainz.MusicBrainzClient
+	cache    *AlbumMetadataCache
+}
+
+// NewMetadataProcessor creates a new metadata processor with default settings
+func NewMetadataProcessor() *MetadataProcessor {
+	return &MetadataProcessor{
+		mbClient: musicbrainz.NewMusicBrainzClientWithDebug(false),
+		cache:    NewAlbumMetadataCache(),
+	}
+}
+
+// SetDebugMode enables or disables debug mode for MusicBrainz client
+func (mp *MetadataProcessor) SetDebugMode(debug bool) {
+	mp.mbClient.SetDebug(debug)
+}
+
+// ============================================================================
+// 3. Cache Management
+// ============================================================================
 
 // AlbumMetadataCache holds cached MusicBrainz release metadata for albums
 type AlbumMetadataCache struct {
-	releases   map[string]*musicbrainz.MusicBrainzRelease // key: "artist|album"
-	releaseIDs map[string]string                          // key: "artist|album", value: release ID
+	releases   map[string]*musicbrainz.MusicBrainzRelease
+	releaseIDs map[string]string
 	mu         sync.RWMutex
 }
 
-// Global cache instance
-var albumCache = &AlbumMetadataCache{
-	releases:   make(map[string]*musicbrainz.MusicBrainzRelease),
-	releaseIDs: make(map[string]string),
-}
-
-// getCacheKey generates a cache key for an album
-func getCacheKey(artist, album string) string {
-	return fmt.Sprintf("%s|%s", artist, album)
+// NewAlbumMetadataCache creates a new album metadata cache
+func NewAlbumMetadataCache() *AlbumMetadataCache {
+	return &AlbumMetadataCache{
+		releases:   make(map[string]*musicbrainz.MusicBrainzRelease),
+		releaseIDs: make(map[string]string),
+	}
 }
 
 // GetCachedRelease retrieves cached release metadata
@@ -66,7 +142,7 @@ func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release 
 	cache.releases[getCacheKey(artist, album)] = release
 }
 
-// ClearCache clears the album metadata cache (useful for testing or memory management)
+// ClearCache clears the album metadata cache
 func (cache *AlbumMetadataCache) ClearCache() {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
@@ -74,22 +150,129 @@ func (cache *AlbumMetadataCache) ClearCache() {
 	cache.releaseIDs = make(map[string]string)
 }
 
+// GetStats returns cache statistics
+func (cache *AlbumMetadataCache) GetStats() (int, []string) {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+	
+	count := len(cache.releases)
+	keys := make([]string, 0, count)
+	for key := range cache.releases {
+		keys = append(keys, key)
+	}
+	return count, keys
+}
+
+// ============================================================================
+// 4. Public API Methods
+// ============================================================================
+
 // AddMetadata adds comprehensive metadata to a FLAC file
-func AddMetadata(filePath string, track shared.Track, album *shared.Album, coverData []byte, totalTracks int, warningCollector *shared.WarningCollector) error {
-	return AddMetadataWithDebug(filePath, track, album, coverData, totalTracks, warningCollector, false)
+func (mp *MetadataProcessor) AddMetadata(filePath string, track shared.Track, album *shared.Album, coverData []byte, totalTracks int, warningCollector *shared.WarningCollector) error {
+	return mp.AddMetadataWithDebug(filePath, track, album, coverData, totalTracks, warningCollector, false)
 }
 
 // AddMetadataWithDebug adds comprehensive metadata to a FLAC file with debug mode support
-func AddMetadataWithDebug(filePath string, track shared.Track, album *shared.Album, coverData []byte, totalTracks int, warningCollector *shared.WarningCollector, debug bool) error {
-	// Set debug mode for MusicBrainz client
-	mbClient.SetDebug(debug)
-	// Open the FLAC file
-	f, err := flac.ParseFile(filePath)
+func (mp *MetadataProcessor) AddMetadataWithDebug(filePath string, track shared.Track, album *shared.Album, coverData []byte, totalTracks int, warningCollector *shared.WarningCollector, debug bool) error {
+	mp.SetDebugMode(debug)
+	
+	f, err := mp.openAndCleanFLACFile(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to parse FLAC file: %w", err)
+		return err
 	}
 
-	// Remove existing VORBIS_COMMENT and PICTURE blocks to ensure clean metadata
+	comment := mp.buildVorbisComment(track, album, totalTracks, warningCollector)
+	
+	vorbisCommentBlock := comment.Marshal()
+	f.Meta = append(f.Meta, &vorbisCommentBlock)
+
+	if err := mp.addCoverArt(f, coverData, warningCollector, track); err != nil {
+		// Cover art errors are non-fatal, already logged to warningCollector
+	}
+
+	return mp.saveFLACFile(f, filePath)
+}
+
+// FindReleaseIDFromISRC attempts to find a MusicBrainz release ID from tracks with ISRC
+func (mp *MetadataProcessor) FindReleaseIDFromISRC(tracks []shared.Track, albumArtist, albumTitle string) {
+	if mp.cache.GetCachedReleaseID(albumArtist, albumTitle) != "" {
+		return
+	}
+	
+	expectedTrackCount := len(tracks)
+	
+	for _, track := range tracks {
+		if track.ISRC == "" {
+			continue
+		}
+		
+		isrcMetadata, err := mp.GetISRCMetadataWithTrackCount(track.ISRC, expectedTrackCount)
+		if err != nil {
+			continue
+		}
+		
+		if isrcMetadata.ReleaseID != "" {
+			mp.cache.SetCachedReleaseID(albumArtist, albumTitle, isrcMetadata.ReleaseID)
+			return
+		}
+	}
+}
+
+// GetISRCMetadata extracts comprehensive metadata from ISRC lookup
+func (mp *MetadataProcessor) GetISRCMetadata(isrc string) (*ISRCMetadata, error) {
+	return mp.GetISRCMetadataWithTrackCount(isrc, 0)
+}
+
+// GetISRCMetadataWithTrackCount extracts comprehensive metadata from ISRC lookup with intelligent release selection
+func (mp *MetadataProcessor) GetISRCMetadataWithTrackCount(isrc string, expectedTrackCount int) (*ISRCMetadata, error) {
+	mbTrack, err := mp.mbClient.SearchTrackByISRC(isrc)
+	if err != nil {
+		return nil, err
+	}
+	
+	metadata := &ISRCMetadata{
+		TrackID: mbTrack.ID,
+	}
+	
+	if len(mbTrack.ArtistCredit) > 0 {
+		metadata.TrackArtistID = mbTrack.ArtistCredit[0].Artist.ID
+	}
+	
+	if len(mbTrack.Releases) > 0 {
+		selectedRelease := mp.selectBestMBRelease(mbTrack.Releases, expectedTrackCount)
+		metadata.ReleaseID = selectedRelease.ID
+		metadata.ReleaseGroupID = selectedRelease.ReleaseGroup.ID
+		
+		if len(selectedRelease.ArtistCredit) > 0 {
+			metadata.ReleaseArtistID = selectedRelease.ArtistCredit[0].Artist.ID
+		}
+	}
+	
+	return metadata, nil
+}
+
+// ClearCache clears the metadata cache
+func (mp *MetadataProcessor) ClearCache() {
+	mp.cache.ClearCache()
+}
+
+// GetCacheStats returns cache statistics
+func (mp *MetadataProcessor) GetCacheStats() (int, []string) {
+	return mp.cache.GetStats()
+}
+
+// ============================================================================
+// 5. Private Core Methods
+// ============================================================================
+
+// openAndCleanFLACFile opens a FLAC file and removes existing metadata blocks
+func (mp *MetadataProcessor) openAndCleanFLACFile(filePath string) (*flac.File, error) {
+	f, err := flac.ParseFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse FLAC file: %w", err)
+	}
+
+	// Remove existing VORBIS_COMMENT and PICTURE blocks
 	var newMetaData []*flac.MetaDataBlock
 	for _, block := range f.Meta {
 		if block.Type != flac.VorbisComment && block.Type != flac.Picture {
@@ -98,22 +281,49 @@ func AddMetadataWithDebug(filePath string, track shared.Track, album *shared.Alb
 	}
 	f.Meta = newMetaData
 
-	// Create a new Vorbis comment block with comprehensive metadata
+	return f, nil
+}
+
+// buildVorbisComment creates a comprehensive Vorbis comment block
+func (mp *MetadataProcessor) buildVorbisComment(track shared.Track, album *shared.Album, totalTracks int, warningCollector *shared.WarningCollector) *flacvorbis.MetaDataBlockVorbisComment {
 	comment := flacvorbis.New()
 
-	// Essential fields for music players
+	// Essential metadata
+	mp.addEssentialMetadata(comment, track, album)
+	
+	// Track and disc information
+	mp.addTrackDiscMetadata(comment, track, album, totalTracks)
+	
+	// Date and temporal metadata
+	mp.addDateMetadata(comment, track, album)
+	
+	// Additional metadata
+	mp.addExtendedMetadata(comment, track, album)
+	
+	// MusicBrainz metadata
+	mp.addMusicBrainzMetadata(comment, track, album, warningCollector)
+	
+	// Technical metadata
+	mp.addTechnicalMetadata(comment, track)
+
+	return comment
+}
+
+// addEssentialMetadata adds core track information
+func (mp *MetadataProcessor) addEssentialMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track, album *shared.Album) {
 	addField(comment, flacvorbis.FIELD_TITLE, track.Title)
 	addField(comment, flacvorbis.FIELD_ARTIST, track.Artist)
+	addField(comment, flacvorbis.FIELD_ALBUM, getAlbumTitle(track, album))
+	addField(comment, "ALBUMARTIST", getAlbumArtist(track, album))
+	
+	genre := getGenre(track, album)
+	if genre != "" && genre != "Unknown" {
+		addField(comment, "GENRE", genre)
+	}
+}
 
-	// Album information - crucial for preventing "Unknown Album"
-	albumTitle := getAlbumTitle(track, album)
-	addField(comment, flacvorbis.FIELD_ALBUM, albumTitle)
-
-	// Album Artist - important for compilation albums and proper grouping
-	albumArtist := getAlbumArtist(track, album)
-	addField(comment, "ALBUMARTIST", albumArtist)
-
-	// Track and disc numbers
+// addTrackDiscMetadata adds track and disc numbering information
+func (mp *MetadataProcessor) addTrackDiscMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track, album *shared.Album, totalTracks int) {
 	trackNumber := track.TrackNumber
 	if trackNumber == 0 {
 		trackNumber = 1
@@ -137,8 +347,10 @@ func AddMetadataWithDebug(filePath string, track shared.Track, album *shared.Alb
 		totalDiscs = album.TotalDiscs
 	}
 	addField(comment, "TOTALDISCS", fmt.Sprintf("%d", totalDiscs))
+}
 
-	// Date and year information
+// addDateMetadata adds date and year information
+func (mp *MetadataProcessor) addDateMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track, album *shared.Album) {
 	releaseDate := getReleaseDate(track, album)
 	if releaseDate != "" {
 		addField(comment, flacvorbis.FIELD_DATE, releaseDate)
@@ -151,23 +363,15 @@ func AddMetadataWithDebug(filePath string, track shared.Track, album *shared.Alb
 		addField(comment, "YEAR", track.Year)
 		addField(comment, flacvorbis.FIELD_DATE, track.Year)
 	}
+}
 
-	// Genre information
-	genre := getGenre(track, album)
-	if genre != "" && genre != "Unknown" {
-		addField(comment, "GENRE", genre)
-	}
-
-	// Additional metadata fields
-	if track.Composer != "" {
-		addField(comment, "COMPOSER", track.Composer)
-	}
-	if track.Producer != "" {
-		addField(comment, "PRODUCER", track.Producer)
-	}
-	if track.ISRC != "" {
-		addField(comment, "ISRC", track.ISRC)
-	}
+// addExtendedMetadata adds additional metadata fields
+func (mp *MetadataProcessor) addExtendedMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track, album *shared.Album) {
+	addField(comment, "COMPOSER", track.Composer)
+	addField(comment, "PRODUCER", track.Producer)
+	addField(comment, "ISRC", track.ISRC)
+	
+	// Copyright information
 	if track.Copyright != "" {
 		addField(comment, "COPYRIGHT", track.Copyright)
 	} else if album != nil && album.Copyright != "" {
@@ -186,163 +390,160 @@ func AddMetadataWithDebug(filePath string, track shared.Track, album *shared.Alb
 		addField(comment, "CATALOGNUMBER", album.UPC)
 		addField(comment, "UPC", album.UPC)
 	}
+}
 
-	// Fetch and add MusicBrainz metadata with optimized caching
-	addMusicBrainzMetadata(comment, track, album, albumTitle, warningCollector)
+// addTechnicalMetadata adds technical and encoding information
+func (mp *MetadataProcessor) addTechnicalMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track) {
+	addField(comment, "ENCODER", DefaultEncoder)
+	addField(comment, "ENCODING", DefaultEncoding)
+	addField(comment, "SOURCE", DefaultSource)
 
-	addField(comment, "ENCODER", "EnhancedFLACDownloader/2.0")
-	addField(comment, "ENCODING", "FLAC")
-	addField(comment, "SOURCE", "DAB")
-
-	// Duration if available
 	if track.Duration > 0 {
 		addField(comment, "LENGTH", fmt.Sprintf("%d", track.Duration))
 	}
+}
 
-	// Marshal the comment to a FLAC metadata block
-	vorbisCommentBlock := comment.Marshal()
-	f.Meta = append(f.Meta, &vorbisCommentBlock)
-
-	// Add cover art if available
-	if err := addCoverArt(f, coverData); err != nil {
-		if warningCollector != nil {
-			context := fmt.Sprintf("%s - %s", track.Artist, track.Title)
-			warningCollector.AddCoverArtMetadataWarning(context, err.Error())
+// addMusicBrainzMetadata handles MusicBrainz metadata fetching with caching
+func (mp *MetadataProcessor) addMusicBrainzMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track, album *shared.Album, warningCollector *shared.WarningCollector) {
+	albumTitle := getAlbumTitle(track, album)
+	
+	// Try ISRC-based metadata first
+	if track.ISRC != "" {
+		expectedTrackCount := mp.getExpectedTrackCount(album)
+		
+		if isrcMetadata, err := mp.GetISRCMetadataWithTrackCount(track.ISRC, expectedTrackCount); err == nil {
+			mp.addISRCMetadataFields(comment, isrcMetadata)
+			return
 		}
 	}
-
-	// Save the file with new metadata
-	if err := f.Save(filePath); err != nil {
-		return fmt.Errorf("failed to save FLAC file with metadata: %w", err)
-	}
-
-	return nil
-}
-
-// addField adds a field to vorbis comment only if value is not empty
-func addField(comment *flacvorbis.MetaDataBlockVorbisComment, field, value string) {
-	if value != "" {
-		comment.Add(field, value)
+	
+	// Fallback to traditional approach
+	mp.addTrackMetadata(comment, track, albumTitle, warningCollector)
+	
+	// Handle release-level metadata
+	if album != nil {
+		mp.addReleaseMetadata(comment, album.Artist, album.Title, warningCollector)
 	}
 }
 
-// getAlbumTitle determines the best album title to use
-func getAlbumTitle(track shared.Track, album *shared.Album) string {
-	if album != nil && album.Title != "" {
-		return album.Title
-	}
-	if track.Album != "" {
-		return track.Album
-	}
-	return "Unknown Album"
+// addISRCMetadataFields adds MusicBrainz fields from ISRC metadata
+func (mp *MetadataProcessor) addISRCMetadataFields(comment *flacvorbis.MetaDataBlockVorbisComment, metadata *ISRCMetadata) {
+	addField(comment, "MUSICBRAINZ_TRACKID", metadata.TrackID)
+	addField(comment, "MUSICBRAINZ_ARTISTID", metadata.TrackArtistID)
+	addField(comment, "MUSICBRAINZ_ALBUMID", metadata.ReleaseID)
+	addField(comment, "MUSICBRAINZ_ALBUMARTISTID", metadata.ReleaseArtistID)
+	addField(comment, "MUSICBRAINZ_RELEASEGROUPID", metadata.ReleaseGroupID)
 }
 
-// getAlbumArtist determines the best album artist to use
-func getAlbumArtist(track shared.Track, album *shared.Album) string {
-	if album != nil && album.Artist != "" {
-		return album.Artist
+// addTrackMetadata adds track-level MusicBrainz metadata
+func (mp *MetadataProcessor) addTrackMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track, albumTitle string, warningCollector *shared.WarningCollector) {
+	var mbTrack *musicbrainz.MusicBrainzTrack
+	var err error
+	
+	if track.ISRC != "" {
+		mbTrack, err = mp.mbClient.SearchTrackByISRC(track.ISRC)
+		if err != nil {
+			mbTrack, err = mp.mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
+		}
+	} else {
+		mbTrack, err = mp.mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
 	}
-	if track.AlbumArtist != "" {
-		return track.AlbumArtist
-	}
-	return track.Artist
-}
-
-// getReleaseDate determines the best release date to use
-func getReleaseDate(track shared.Track, album *shared.Album) string {
-	if track.ReleaseDate != "" {
-		return track.ReleaseDate
-	}
-	if album != nil && album.ReleaseDate != "" {
-		return album.ReleaseDate
-	}
-	return ""
-}
-
-// getGenre determines the best genre to use
-func getGenre(track shared.Track, album *shared.Album) string {
-	if track.Genre != "" && track.Genre != "Unknown" {
-		return track.Genre
-	}
-	if album != nil && album.Genre != "" && album.Genre != "Unknown" {
-		return album.Genre
-	}
-	return ""
-}
-
-// ISRCMetadata holds comprehensive metadata extracted from ISRC lookup
-type ISRCMetadata struct {
-	ReleaseID        string
-	ReleaseArtistID  string
-	ReleaseGroupID   string
-	TrackID          string
-	TrackArtistID    string
-}
-
-// FindReleaseIDFromISRC attempts to find a MusicBrainz release ID from tracks with ISRC
-// This should be called before processing individual tracks to establish the release ID for the album
-func FindReleaseIDFromISRC(tracks []shared.Track, albumArtist, albumTitle string) {
-	// Check if we already have a cached release ID
-	if albumCache.GetCachedReleaseID(albumArtist, albumTitle) != "" {
+	
+	if err != nil {
+		if warningCollector != nil {
+			warningCollector.AddMusicBrainzTrackWarning(track.Artist, track.Title, err.Error())
+		}
 		return
 	}
 	
-	expectedTrackCount := len(tracks)
-	
-	// Look for the first track with ISRC
-	for _, track := range tracks {
-		if track.ISRC != "" {
-			isrcMetadata, err := GetISRCMetadataWithTrackCount(track.ISRC, expectedTrackCount)
-			if err != nil {
-				continue // Try next track with ISRC
-			}
-			
-			if isrcMetadata.ReleaseID != "" {
-				albumCache.SetCachedReleaseID(albumArtist, albumTitle, isrcMetadata.ReleaseID)
-				return
-			}
-		}
-	}
-}
-
-// GetISRCMetadata extracts comprehensive metadata from ISRC lookup in a single API call
-func GetISRCMetadata(isrc string) (*ISRCMetadata, error) {
-	return GetISRCMetadataWithTrackCount(isrc, 0)
-}
-
-// GetISRCMetadataWithTrackCount extracts comprehensive metadata from ISRC lookup with intelligent release selection
-func GetISRCMetadataWithTrackCount(isrc string, expectedTrackCount int) (*ISRCMetadata, error) {
-	mbTrack, err := mbClient.SearchTrackByISRC(isrc)
-	if err != nil {
-		return nil, err
-	}
-	
-	metadata := &ISRCMetadata{
-		TrackID: mbTrack.ID,
-	}
-	
-	// Extract track artist ID
+	addField(comment, "MUSICBRAINZ_TRACKID", mbTrack.ID)
 	if len(mbTrack.ArtistCredit) > 0 {
-		metadata.TrackArtistID = mbTrack.ArtistCredit[0].Artist.ID
+		addField(comment, "MUSICBRAINZ_ARTISTID", mbTrack.ArtistCredit[0].Artist.ID)
 	}
+}
+
+// addReleaseMetadata handles release-level MusicBrainz metadata with caching
+func (mp *MetadataProcessor) addReleaseMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, artist, albumTitle string, warningCollector *shared.WarningCollector) {
+	mbRelease := mp.cache.GetCachedRelease(artist, albumTitle)
 	
-	// Select the best matching release based on track count
-	if len(mbTrack.Releases) > 0 {
-		selectedRelease := selectBestRelease(mbTrack.Releases, expectedTrackCount)
-		metadata.ReleaseID = selectedRelease.ID
-		metadata.ReleaseGroupID = selectedRelease.ReleaseGroup.ID
+	if mbRelease == nil {
+		releaseID := mp.cache.GetCachedReleaseID(artist, albumTitle)
 		
-		// Extract release artist ID
-		if len(selectedRelease.ArtistCredit) > 0 {
-			metadata.ReleaseArtistID = selectedRelease.ArtistCredit[0].Artist.ID
+		var err error
+		if releaseID != "" {
+			mbRelease, err = mp.mbClient.GetReleaseMetadata(releaseID)
+		} else {
+			mbRelease, err = mp.mbClient.SearchRelease(artist, albumTitle)
+		}
+		
+		if err != nil {
+			if warningCollector != nil {
+				warningCollector.AddMusicBrainzReleaseWarning(artist, albumTitle, err.Error())
+			}
+			return
+		}
+		
+		mp.cache.SetCachedRelease(artist, albumTitle, mbRelease)
+		
+		if warningCollector != nil {
+			warningCollector.RemoveMusicBrainzReleaseWarning(artist, albumTitle)
 		}
 	}
 	
-	return metadata, nil
+	addField(comment, "MUSICBRAINZ_ALBUMID", mbRelease.ID)
+	if len(mbRelease.ArtistCredit) > 0 {
+		addField(comment, "MUSICBRAINZ_ALBUMARTISTID", mbRelease.ArtistCredit[0].Artist.ID)
+	}
+	if mbRelease.ReleaseGroup.ID != "" {
+		addField(comment, "MUSICBRAINZ_RELEASEGROUPID", mbRelease.ReleaseGroup.ID)
+	}
 }
 
-// selectBestRelease chooses the most appropriate release based on intelligent heuristics
-func selectBestRelease(releases []struct {
+// addCoverArt adds cover art to the FLAC file
+func (mp *MetadataProcessor) addCoverArt(f *flac.File, coverData []byte, warningCollector *shared.WarningCollector, track shared.Track) error {
+	if len(coverData) == 0 {
+		return nil
+	}
+
+	imageFormat := detectImageFormat(coverData)
+	
+	picture, err := flacpicture.NewFromImageData(
+		flacpicture.PictureTypeFrontCover,
+		"Front Cover",
+		coverData,
+		imageFormat,
+	)
+	if err != nil {
+		picture, err = flacpicture.NewFromImageData(
+			flacpicture.PictureTypeOther,
+			"Cover Art",
+			coverData,
+			imageFormat,
+		)
+		if err != nil {
+			if warningCollector != nil {
+				context := fmt.Sprintf("%s - %s", track.Artist, track.Title)
+				warningCollector.AddCoverArtMetadataWarning(context, err.Error())
+			}
+			return fmt.Errorf("failed to create picture metadata: %w", err)
+		}
+	}
+
+	pictureBlock := picture.Marshal()
+	f.Meta = append(f.Meta, &pictureBlock)
+	return nil
+}
+
+// saveFLACFile saves the FLAC file with new metadata
+func (mp *MetadataProcessor) saveFLACFile(f *flac.File, filePath string) error {
+	if err := f.Save(filePath); err != nil {
+		return fmt.Errorf("failed to save FLAC file with metadata: %w", err)
+	}
+	return nil
+}
+
+// selectBestMBRelease chooses the most appropriate MusicBrainz release based on intelligent heuristics
+func (mp *MetadataProcessor) selectBestMBRelease(releases []struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 	Date  string `json:"date"`
@@ -397,7 +598,6 @@ func selectBestRelease(releases []struct {
 		return releases[0]
 	}
 	
-	// Score each release based on multiple factors
 	type scoredRelease struct {
 		release struct {
 			ID    string `json:"id"`
@@ -431,81 +631,7 @@ func selectBestRelease(releases []struct {
 	var scoredReleases []scoredRelease
 	
 	for _, release := range releases {
-		score := 0
-		title := strings.ToLower(release.Title)
-		
-		// Prefer releases that look like full albums over singles/compilations
-		if expectedTrackCount > 5 {
-			// Looking for an album - prefer releases that look like album titles
-			if strings.Contains(title, "honeymoon") || 
-			   (len(title) < 30 && !strings.Contains(title, " - ") && 
-			    !strings.Contains(title, "various") &&
-			    !strings.Contains(title, "compilation") &&
-			    !strings.Contains(title, "hits") &&
-			    !strings.Contains(title, "best of") &&
-			    !strings.Contains(title, "collection") &&
-			    !strings.Contains(title, "playlist") &&
-			    !strings.Contains(title, "dmc") &&
-			    !strings.Contains(title, "brit awards") &&
-			    !strings.Contains(title, "cool grooves")) {
-				score += 100
-			}
-			
-			// Strongly prefer releases without "demo" in the title for albums
-			if !strings.Contains(title, "demo") {
-				score += 30
-			}
-			
-			// Penalize obvious compilations and singles
-			if strings.Contains(title, "high by the beach") && expectedTrackCount > 10 {
-				score -= 50 // This is likely a single, not an album
-			}
-		} else if expectedTrackCount <= 3 {
-			// Looking for a single/EP
-			if strings.Contains(title, "single") || 
-			   strings.Contains(title, "high by the beach") ||
-			   len(title) < 20 {
-				score += 50
-			}
-		}
-		
-		// Prefer releases with earlier dates (usually the original)
-		if release.Date != "" && len(release.Date) >= 4 {
-			year := release.Date[:4]
-			if year >= "2010" && year <= "2020" {
-				// Reasonable year range, prefer earlier releases
-				if year <= "2015" {
-					score += 10
-				}
-			}
-		}
-		
-		// Prefer releases that don't look like compilations
-		if !strings.Contains(title, "various") &&
-		   !strings.Contains(title, "compilation") &&
-		   !strings.Contains(title, "hits") &&
-		   !strings.Contains(title, "collection") {
-			score += 15
-		}
-		
-		// Prefer Digital Media format for digital downloads
-		for _, media := range release.Media {
-			if strings.ToLower(media.Format) == "digital media" {
-				score += 40 // Strong preference for digital releases
-				break
-			}
-		}
-		
-		// Penalize physical formats when we're downloading digital
-		for _, media := range release.Media {
-			format := strings.ToLower(media.Format)
-			if format == "cd" || format == "vinyl" || format == "cassette" || 
-			   format == "dvd" || format == "blu-ray" {
-				score -= 20 // Penalize physical formats
-				break
-			}
-		}
-		
+		score := mp.scoreMBRelease(release, expectedTrackCount)
 		scoredReleases = append(scoredReleases, scoredRelease{
 			release: release,
 			score:   score,
@@ -523,195 +649,361 @@ func selectBestRelease(releases []struct {
 	return bestRelease.release
 }
 
-// addMusicBrainzMetadata handles optimized MusicBrainz metadata fetching with caching
-func addMusicBrainzMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track, album *shared.Album, albumTitle string, warningCollector *shared.WarningCollector) {
-	// Try ISRC-based metadata first - this gives us all IDs in one API call
-	if track.ISRC != "" {
-		// Get expected track count from album
-		expectedTrackCount := 0
-		if album != nil {
-			expectedTrackCount = len(album.Tracks)
-			if expectedTrackCount == 0 && album.TotalTracks > 0 {
-				expectedTrackCount = album.TotalTracks
-			}
+// selectBestRelease chooses the most appropriate release based on intelligent heuristics
+func (mp *MetadataProcessor) selectBestRelease(releases []Release, expectedTrackCount int) Release {
+	if len(releases) == 1 {
+		return releases[0]
+	}
+	
+	type scoredRelease struct {
+		release Release
+		score   int
+	}
+	
+	var scoredReleases []scoredRelease
+	
+	for _, release := range releases {
+		score := mp.scoreRelease(release, expectedTrackCount)
+		scoredReleases = append(scoredReleases, scoredRelease{
+			release: release,
+			score:   score,
+		})
+	}
+	
+	// Find the release with the highest score
+	bestRelease := scoredReleases[0]
+	for _, sr := range scoredReleases[1:] {
+		if sr.score > bestRelease.score {
+			bestRelease = sr
+		}
+	}
+	
+	return bestRelease.release
+}
+
+// scoreMBRelease calculates a score for a MusicBrainz release based on various factors
+func (mp *MetadataProcessor) scoreMBRelease(release struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Date  string `json:"date"`
+	ArtistCredit []struct {
+		Artist struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"artist"`
+	} `json:"artist-credit"`
+	ReleaseGroup struct {
+		ID string `json:"id"`
+	} `json:"release-group"`
+	Media []struct {
+		Format string `json:"format"`
+		Discs  []struct {
+			ID string `json:"id"`
+		} `json:"discs"`
+		Tracks []struct {
+			ID     string `json:"id"`
+			Number string `json:"number"`
+			Title  string `json:"title"`
+			Length int    `json:"length"`
+		} `json:"tracks"`
+	} `json:"media"`
+}, expectedTrackCount int) int {
+	score := 0
+	title := strings.ToLower(release.Title)
+	
+	// Prefer releases that look like full albums over singles/compilations
+	if expectedTrackCount > 5 {
+		if mp.looksLikeAlbum(title) {
+			score += 100
 		}
 		
-		isrcMetadata, err := GetISRCMetadataWithTrackCount(track.ISRC, expectedTrackCount)
-		if err == nil {
-			// Successfully got comprehensive metadata from ISRC
-			addField(comment, "MUSICBRAINZ_TRACKID", isrcMetadata.TrackID)
-			addField(comment, "MUSICBRAINZ_ARTISTID", isrcMetadata.TrackArtistID)
-			addField(comment, "MUSICBRAINZ_ALBUMID", isrcMetadata.ReleaseID)
-			addField(comment, "MUSICBRAINZ_ALBUMARTISTID", isrcMetadata.ReleaseArtistID)
-			addField(comment, "MUSICBRAINZ_RELEASEGROUPID", isrcMetadata.ReleaseGroupID)
-			return // We have all the metadata we need
+		if !strings.Contains(title, "demo") {
+			score += 30
 		}
-		// ISRC lookup failed, fall through to traditional approach
-	}
-	
-	// Fallback to traditional approach for tracks without ISRC or failed ISRC lookup
-	var mbTrack *musicbrainz.MusicBrainzTrack
-	var err error
-	
-	if track.ISRC != "" {
-		// Try ISRC search first (without includes for compatibility)
-		mbTrack, err = mbClient.SearchTrackByISRC(track.ISRC)
-		if err != nil {
-			// ISRC search failed, fall back to traditional search
-			mbTrack, err = mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
+		
+		if mp.looksLikeSingle(title) && expectedTrackCount > 10 {
+			score -= 50
 		}
-	} else {
-		// No ISRC available, use traditional search
-		mbTrack, err = mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
-	}
-	
-	if err != nil {
-		if warningCollector != nil {
-			warningCollector.AddMusicBrainzTrackWarning(track.Artist, track.Title, err.Error())
-		}
-	} else {
-		addField(comment, "MUSICBRAINZ_TRACKID", mbTrack.ID)
-		if len(mbTrack.ArtistCredit) > 0 {
-			addField(comment, "MUSICBRAINZ_ARTISTID", mbTrack.ArtistCredit[0].Artist.ID)
+	} else if expectedTrackCount <= 3 {
+		if mp.looksLikeSingle(title) {
+			score += 50
 		}
 	}
+	
+	// Prefer releases with reasonable dates
+	if release.Date != "" && len(release.Date) >= 4 {
+		year := release.Date[:4]
+		if year >= "2010" && year <= "2020" && year <= "2015" {
+			score += 10
+		}
+	}
+	
+	// Prefer non-compilation releases
+	if !mp.looksLikeCompilation(title) {
+		score += 15
+	}
+	
+	// Format preferences - convert MusicBrainz media to our Media type for scoring
+	var mediaList []Media
+	for _, m := range release.Media {
+		var discs []Disc
+		for _, d := range m.Discs {
+			discs = append(discs, Disc{ID: d.ID})
+		}
+		var tracks []Track
+		for _, t := range m.Tracks {
+			tracks = append(tracks, Track{
+				ID:     t.ID,
+				Number: t.Number,
+				Title:  t.Title,
+				Length: t.Length,
+			})
+		}
+		mediaList = append(mediaList, Media{
+			Format: m.Format,
+			Discs:  discs,
+			Tracks: tracks,
+		})
+	}
+	score += mp.scoreByFormat(mediaList)
+	
+	return score
+}
 
-	// Handle release-level metadata with caching (only if we didn't get it from ISRC)
-	if album != nil {
-		addReleaseMetadata(comment, album.Artist, album.Title, warningCollector)
+// scoreRelease calculates a score for a release based on various factors
+func (mp *MetadataProcessor) scoreRelease(release Release, expectedTrackCount int) int {
+	score := 0
+	title := strings.ToLower(release.Title)
+	
+	// Prefer releases that look like full albums over singles/compilations
+	if expectedTrackCount > 5 {
+		if mp.looksLikeAlbum(title) {
+			score += 100
+		}
+		
+		if !strings.Contains(title, "demo") {
+			score += 30
+		}
+		
+		if mp.looksLikeSingle(title) && expectedTrackCount > 10 {
+			score -= 50
+		}
+	} else if expectedTrackCount <= 3 {
+		if mp.looksLikeSingle(title) {
+			score += 50
+		}
+	}
+	
+	// Prefer releases with reasonable dates
+	if release.Date != "" && len(release.Date) >= 4 {
+		year := release.Date[:4]
+		if year >= "2010" && year <= "2020" && year <= "2015" {
+			score += 10
+		}
+	}
+	
+	// Prefer non-compilation releases
+	if !mp.looksLikeCompilation(title) {
+		score += 15
+	}
+	
+	// Format preferences
+	score += mp.scoreByFormat(release.Media)
+	
+	return score
+}
+
+// ============================================================================
+// 6. Helper/Utility Functions
+// ============================================================================
+
+// getExpectedTrackCount determines expected track count from album
+func (mp *MetadataProcessor) getExpectedTrackCount(album *shared.Album) int {
+	if album == nil {
+		return 0
+	}
+	
+	if len(album.Tracks) > 0 {
+		return len(album.Tracks)
+	}
+	
+	return album.TotalTracks
+}
+
+// looksLikeAlbum determines if a title looks like an album
+func (mp *MetadataProcessor) looksLikeAlbum(title string) bool {
+	return len(title) < 30 && 
+		   !strings.Contains(title, " - ") && 
+		   !mp.looksLikeCompilation(title)
+}
+
+// looksLikeSingle determines if a title looks like a single
+func (mp *MetadataProcessor) looksLikeSingle(title string) bool {
+	return strings.Contains(title, "single") || len(title) < 20
+}
+
+// looksLikeCompilation determines if a title looks like a compilation
+func (mp *MetadataProcessor) looksLikeCompilation(title string) bool {
+	compilationKeywords := []string{
+		"various", "compilation", "hits", "best of", 
+		"collection", "playlist", "dmc", "brit awards", "cool grooves",
+	}
+	
+	for _, keyword := range compilationKeywords {
+		if strings.Contains(title, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+// scoreByFormat scores releases based on their media format
+func (mp *MetadataProcessor) scoreByFormat(media []Media) int {
+	for _, m := range media {
+		format := strings.ToLower(m.Format)
+		switch format {
+		case "digital media":
+			return 40
+		case "cd", "vinyl", "cassette", "dvd", "blu-ray":
+			return -20
+		}
+	}
+	return 0
+}
+
+// getCacheKey generates a cache key for an album
+func getCacheKey(artist, album string) string {
+	return fmt.Sprintf("%s|%s", artist, album)
+}
+
+// addField adds a field to vorbis comment only if value is not empty
+func addField(comment *flacvorbis.MetaDataBlockVorbisComment, field, value string) {
+	if value != "" {
+		comment.Add(field, value)
 	}
 }
 
-// addReleaseMetadata handles release-level MusicBrainz metadata with caching and retry logic
-func addReleaseMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, artist, albumTitle string, warningCollector *shared.WarningCollector) {
-	// Check cache first
-	mbRelease := albumCache.GetCachedRelease(artist, albumTitle)
-	
-	if mbRelease == nil {
-		// Check if we have a cached release ID from ISRC lookup
-		releaseID := albumCache.GetCachedReleaseID(artist, albumTitle)
-		
-		if releaseID != "" {
-			// We have a release ID from ISRC lookup, fetch the full release metadata
-			var err error
-			mbRelease, err = mbClient.GetReleaseMetadata(releaseID)
-			if err != nil {
-				if warningCollector != nil {
-					warningCollector.AddMusicBrainzReleaseWarning(artist, albumTitle, fmt.Sprintf("Failed to fetch release metadata for ID %s: %s", releaseID, err.Error()))
-				}
-				return
-			}
-		} else {
-			// No cached release ID, try traditional release search
-			var err error
-			mbRelease, err = mbClient.SearchRelease(artist, albumTitle)
-			if err != nil {
-				if warningCollector != nil {
-					warningCollector.AddMusicBrainzReleaseWarning(artist, albumTitle, err.Error())
-				}
-				return
-			}
-		}
-		
-		// Cache the successful result
-		albumCache.SetCachedRelease(artist, albumTitle, mbRelease)
-		
-		// Clear any previous warnings for this release since we now have the metadata
-		if warningCollector != nil {
-			warningCollector.RemoveMusicBrainzReleaseWarning(artist, albumTitle)
-		}
+// getAlbumTitle determines the best album title to use
+func getAlbumTitle(track shared.Track, album *shared.Album) string {
+	if album != nil && album.Title != "" {
+		return album.Title
 	}
-	
-	// Add release-level metadata fields
-	addField(comment, "MUSICBRAINZ_ALBUMID", mbRelease.ID)
-	if len(mbRelease.ArtistCredit) > 0 {
-		addField(comment, "MUSICBRAINZ_ALBUMARTISTID", mbRelease.ArtistCredit[0].Artist.ID)
+	if track.Album != "" {
+		return track.Album
 	}
-	if mbRelease.ReleaseGroup.ID != "" {
-		addField(comment, "MUSICBRAINZ_RELEASEGROUPID", mbRelease.ReleaseGroup.ID)
-	}
+	return "Unknown Album"
 }
 
-// addCoverArt adds cover art to the FLAC file
-func addCoverArt(f *flac.File, coverData []byte) error {
-	if coverData == nil || len(coverData) == 0 {
-		return nil
+// getAlbumArtist determines the best album artist to use
+func getAlbumArtist(track shared.Track, album *shared.Album) string {
+	if album != nil && album.Artist != "" {
+		return album.Artist
 	}
-
-	// Determine image format
-	imageFormat := detectImageFormat(coverData)
-
-	// Try to create front cover first
-	picture, err := flacpicture.NewFromImageData(
-		flacpicture.PictureTypeFrontCover,
-		"Front Cover",
-		coverData,
-		imageFormat,
-	)
-	if err != nil {
-		// If front cover fails, try as generic picture
-		picture, err = flacpicture.NewFromImageData(
-			flacpicture.PictureTypeOther,
-			"Cover Art",
-			coverData,
-			imageFormat,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create picture metadata: %w", err)
-		}
+	if track.AlbumArtist != "" {
+		return track.AlbumArtist
 	}
+	return track.Artist
+}
 
-	pictureBlock := picture.Marshal()
-	f.Meta = append(f.Meta, &pictureBlock)
+// getReleaseDate determines the best release date to use
+func getReleaseDate(track shared.Track, album *shared.Album) string {
+	if track.ReleaseDate != "" {
+		return track.ReleaseDate
+	}
+	if album != nil && album.ReleaseDate != "" {
+		return album.ReleaseDate
+	}
+	return ""
+}
 
-	return nil
+// getGenre determines the best genre to use
+func getGenre(track shared.Track, album *shared.Album) string {
+	if track.Genre != "" && track.Genre != "Unknown" {
+		return track.Genre
+	}
+	if album != nil && album.Genre != "" && album.Genre != "Unknown" {
+		return album.Genre
+	}
+	return ""
 }
 
 // detectImageFormat detects the image format from the data
 func detectImageFormat(data []byte) string {
 	if len(data) < 4 {
-		return "image/jpeg" // Default fallback
+		return "image/jpeg"
 	}
 
-	// Check for PNG signature (89 50 4E 47)
+	// PNG signature (89 50 4E 47)
 	if data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 {
 		return "image/png"
 	}
 
-	// Check for JPEG signature (FF D8)
+	// JPEG signature (FF D8)
 	if data[0] == 0xFF && data[1] == 0xD8 {
 		return "image/jpeg"
 	}
 
-	// Check for WebP signature (RIFF...WEBP)
-	if len(data) >= 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+	// WebP signature (RIFF...WEBP)
+	if len(data) >= 12 && 
+		data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
 		data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50 {
-			return "image/webp"
-		}
-
-		// Check for GIF signature (GIF8)
-		if len(data) >= 4 && data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38 {
-			return "image/gif"
-		}
-
-		// Default to JPEG if we can't determine
-		return "image/jpeg"
-}
-
-// GetCacheStats returns statistics about the current cache state
-func GetCacheStats() (int, []string) {
-	albumCache.mu.RLock()
-	defer albumCache.mu.RUnlock()
-	
-	count := len(albumCache.releases)
-	var keys []string
-	for key := range albumCache.releases {
-		keys = append(keys, key)
+		return "image/webp"
 	}
-	return count, keys
+
+	// GIF signature (GIF8)
+	if len(data) >= 4 && 
+		data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38 {
+		return "image/gif"
+	}
+
+	return "image/jpeg"
 }
 
-// ClearAlbumCache clears the global album metadata cache
+// ============================================================================
+// 7. Global Compatibility Layer (for backward compatibility)
+// ============================================================================
+
+var (
+	// Global instance for backward compatibility
+	globalProcessor = NewMetadataProcessor()
+)
+
+// SetMusicBrainzDebug sets debug mode for the global MusicBrainz client
+func SetMusicBrainzDebug(debug bool) {
+	globalProcessor.SetDebugMode(debug)
+}
+
+// AddMetadata adds comprehensive metadata to a FLAC file (global function for compatibility)
+func AddMetadata(filePath string, track shared.Track, album *shared.Album, coverData []byte, totalTracks int, warningCollector *shared.WarningCollector) error {
+	return globalProcessor.AddMetadata(filePath, track, album, coverData, totalTracks, warningCollector)
+}
+
+// AddMetadataWithDebug adds comprehensive metadata to a FLAC file with debug mode support (global function for compatibility)
+func AddMetadataWithDebug(filePath string, track shared.Track, album *shared.Album, coverData []byte, totalTracks int, warningCollector *shared.WarningCollector, debug bool) error {
+	return globalProcessor.AddMetadataWithDebug(filePath, track, album, coverData, totalTracks, warningCollector, debug)
+}
+
+// FindReleaseIDFromISRC attempts to find a MusicBrainz release ID from tracks with ISRC (global function for compatibility)
+func FindReleaseIDFromISRC(tracks []shared.Track, albumArtist, albumTitle string) {
+	globalProcessor.FindReleaseIDFromISRC(tracks, albumArtist, albumTitle)
+}
+
+// GetISRCMetadata extracts comprehensive metadata from ISRC lookup (global function for compatibility)
+func GetISRCMetadata(isrc string) (*ISRCMetadata, error) {
+	return globalProcessor.GetISRCMetadata(isrc)
+}
+
+// GetISRCMetadataWithTrackCount extracts comprehensive metadata from ISRC lookup with intelligent release selection (global function for compatibility)
+func GetISRCMetadataWithTrackCount(isrc string, expectedTrackCount int) (*ISRCMetadata, error) {
+	return globalProcessor.GetISRCMetadataWithTrackCount(isrc, expectedTrackCount)
+}
+
+// GetCacheStats returns statistics about the current cache state (global function for compatibility)
+func GetCacheStats() (int, []string) {
+	return globalProcessor.GetCacheStats()
+}
+
+// ClearAlbumCache clears the global album metadata cache (global function for compatibility)
 func ClearAlbumCache() {
-	albumCache.ClearCache()
+	globalProcessor.ClearCache()
 }
