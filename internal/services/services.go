@@ -250,7 +250,10 @@ func (ds *DownloadService) DownloadTrack(ctx context.Context, trackID string, cf
 		Tracks: []shared.Track{*track},
 	}
 	
-	return ds.DownloadTracks(ctx, []shared.Track{*track}, album, cfg, debug, format, bitrate)
+	stats, err := ds.DownloadTracks(ctx, []shared.Track{*track}, album, cfg, debug, format, bitrate)
+	
+	// Note: DownloadTracks already displays warning summary, so we don't need to duplicate it here
+	return stats, err
 }
 
 // DownloadTrackDirect downloads a track using the track data directly (bypassing GetTrack API call)
@@ -281,7 +284,10 @@ func (ds *DownloadService) DownloadTrackDirect(ctx context.Context, track shared
 		fmt.Printf("DEBUG - Created album: ID='%s', Title='%s', Artist='%s'\n", album.ID, album.Title, album.Artist)
 	}
 	
-	return ds.DownloadTracks(ctx, []shared.Track{track}, album, cfg, debug, format, bitrate)
+	stats, err := ds.DownloadTracks(ctx, []shared.Track{track}, album, cfg, debug, format, bitrate)
+	
+	// Note: DownloadTracks already displays warning summary, so we don't need to duplicate it here
+	return stats, err
 }
 
 func (ds *DownloadService) DownloadTracks(ctx context.Context, tracks []shared.Track, album *shared.Album, cfg *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error) {
@@ -321,6 +327,9 @@ func (ds *DownloadService) DownloadTracks(ctx context.Context, tracks []shared.T
 		stats.SuccessCount++
 		// Success message is logged by the calling command
 	}
+	
+	// Note: Warnings are collected but not displayed here
+	// They will be displayed at the end of the entire download queue
 	
 	return stats, nil
 }
