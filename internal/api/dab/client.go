@@ -20,37 +20,66 @@ import (
 	"dab-downloader/internal/shared"
 )
 
-// NewDabAPI creates a new API client
-func NewDabAPI(endpoint, outputLocation string, client *http.Client) *DabAPI {
-	// Create a conservative rate limiter: 4 req/sec with burst of 8
-	limiter := rate.NewLimiter(rate.Every(250*time.Millisecond), 8)
+// Constants for retry and rate limiting configuration
+const (
+	defaultRateLimit     = 250 * time.Millisecond // 4 req/sec
+	defaultBurstLimit    = 8
+	conservativeRateLimit = 500 * time.Millisecond // 2 req/sec  
+	conservativeBurstLimit = 4
 	
-	return &DabAPI{
-		endpoint:       strings.TrimSuffix(endpoint, "/"),
-		outputLocation: outputLocation,
-		client:         client,
-		rateLimiter:    limiter,
-	}
-}
+	maxRetries           = 5
+	baseRetryDelay       = 1 * time.Second
+	maxRetryDelay        = 30 * time.Second
+	rateLimitThreshold   = 10 // Adjust rate limit after this many consecutive 429s
+)
 
+// Fibonacci sequence for backoff delays
+var fibonacciSequence = []int{1, 2, 3, 5, 8, 13, 21, 34}
+
+// DabAPI represents a client for the DAB music API
 type DabAPI struct {
 	endpoint       string
 	outputLocation string
 	client         *http.Client
-	rateLimiter    *rate.Limiter // Rate limiter for API requests
-	rateLimitHits  int           // Counter for consecutive rate limit hits
-	mu             sync.Mutex    // Mutex to protect rate limit adjustments
+	rateLimiter    *rate.Limiter
+	rateLimitHits  int
+	mu             sync.Mutex
 }
 
-// Request makes HTTP requests to the API with specialized 429 retry handling
+// NewDabAPI creates a new API client with default configuration
+func NewDabAPI(endpoint, outputLocation string, client *http.Client) *DabAPI {
+	return &DabAPI{
+		endpoint:       strings.TrimSuffix(endpoint, "/"),
+		outputLocation: outputLocation,
+		client:         client,
+		rateLimiter:    rate.NewLimiter(rate.Every(defaultRateLimit), defaultBurstLimit),
+	}
+}
+
+// Request makes HTTP requests to the API with intelligent retry handling
 func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, params []shared.QueryParam) (*http.Response, error) {
-	// Wait for rate limiter permission - this allows bursts while maintaining overall rate limits
+	// Wait for rate limiter permission
 	if err := api.rateLimiter.Wait(ctx); err != nil {
 		return nil, fmt.Errorf("rate limiter wait failed: %w", err)
 	}
 
-	var fullURL string
+	// Build the complete URL
+	u, err := api.buildURL(path, isPathOnly, params)
+	if err != nil {
+		return nil, err
+	}
 
+	// Execute request with retry logic
+	return api.requestWithRetry(ctx, u.String())
+}
+
+// ============================================================================
+// CORE HTTP METHODS (Private)
+// ============================================================================
+
+// buildURL constructs the full URL for API requests
+func (api *DabAPI) buildURL(path string, isPathOnly bool, params []shared.QueryParam) (*url.URL, error) {
+	var fullURL string
 	if isPathOnly {
 		fullURL = fmt.Sprintf("%s/%s", api.endpoint, strings.TrimPrefix(path, "/"))
 	} else {
@@ -70,54 +99,60 @@ func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, pa
 		u.RawQuery = q.Encode()
 	}
 
-	// Use specialized 429 retry logic
-	return api.requestWithRateLimitRetry(ctx, u.String())
+	return u, nil
 }
 
-// fibonacciDelay calculates delay using Fibonacci sequence: 1, 1, 2, 3, 5, 8, 13...
+// fibonacciDelay calculates delay using Fibonacci sequence for more gradual backoff
 func fibonacciDelay(attempt int, baseDelay time.Duration) time.Duration {
-	if attempt <= 0 {
+	if attempt < 0 {
 		return baseDelay
 	}
 	
-	// Fibonacci sequence: F(0)=1, F(1)=1, F(n)=F(n-1)+F(n-2)
-	fib := []int{1, 2, 3, 5, 8, 13, 21, 34}
-	
-	if attempt >= len(fib) {
+	if attempt >= len(fibonacciSequence) {
 		// For attempts beyond our precomputed sequence, use the last value
-		attempt = len(fib) - 1
+		attempt = len(fibonacciSequence) - 1
 	}
 	
-	return baseDelay * time.Duration(fib[attempt])
+	return baseDelay * time.Duration(fibonacciSequence[attempt])
 }
 
-// requestWithRateLimitRetry implements Fibonacci backoff specifically for 429 errors
-func (api *DabAPI) requestWithRateLimitRetry(ctx context.Context, url string) (*http.Response, error) {
-	const maxRetries = 5
-	const baseDelay = 1 * time.Second
-	const maxDelay = 30 * time.Second
+// addJitter adds random jitter to prevent thundering herd effect
+func addJitter(delay time.Duration) time.Duration {
+	if delay <= 0 {
+		return delay
+	}
+	jitter := time.Duration(rand.Int63n(int64(delay / 4)))
+	return delay + jitter
+}
+
+// resetRateLimitCounters resets the rate limit hit counters on successful requests
+func (api *DabAPI) resetRateLimitCounters() {
+	api.mu.Lock()
+	api.rateLimitHits = 0
+	api.mu.Unlock()
+}
+
+// trackRateLimitHit increments the rate limit hit counter and returns if adjustment is needed
+func (api *DabAPI) trackRateLimitHit() bool {
+	api.mu.Lock()
+	defer api.mu.Unlock()
 	
+	api.rateLimitHits++
+	return api.rateLimitHits > rateLimitThreshold
+}
+
+// requestWithRetry implements intelligent retry logic with Fibonacci backoff
+func (api *DabAPI) requestWithRetry(ctx context.Context, url string) (*http.Response, error) {
 	var lastResp *http.Response
 	var lastErr error
 	var consecutiveRateLimits int
 	
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		resp, err := api.executeRequest(ctx, url)
 		if err != nil {
-			return nil, fmt.Errorf("error creating request: %w", err)
-		}
-		req.Header.Set("User-Agent", shared.UserAgent)
-
-		resp, err := api.client.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("error executing request: %w", err)
-			// For network errors, use Fibonacci retry logic
+			lastErr = err
 			if attempt < maxRetries-1 {
-				delay := fibonacciDelay(attempt, baseDelay)
-				if delay > maxDelay {
-					delay = maxDelay
-				}
-				time.Sleep(delay)
+				api.waitWithBackoff(attempt, baseRetryDelay)
 				continue
 			}
 			return nil, lastErr
@@ -125,61 +160,29 @@ func (api *DabAPI) requestWithRateLimitRetry(ctx context.Context, url string) (*
 
 		// Handle successful responses
 		if resp.StatusCode == http.StatusOK {
-			// Reset consecutive rate limit counter on success
-			consecutiveRateLimits = 0
-			api.mu.Lock()
-			api.rateLimitHits = 0 // Reset global counter on success
-			api.mu.Unlock()
+			api.resetRateLimitCounters()
 			return resp, nil
 		}
 
-		// Handle 429 rate limit errors with incremental backoff
+		// Handle rate limit errors
 		if resp.StatusCode == http.StatusTooManyRequests {
 			resp.Body.Close()
 			lastResp = resp
 			consecutiveRateLimits++
 			
-			// Track global rate limit hits
-			api.mu.Lock()
-			api.rateLimitHits++
-			shouldAdjust := api.rateLimitHits > 10 // Adjust after 10 consecutive hits
-			api.mu.Unlock()
-			
-			// Automatically adjust rate limiter if we're hitting limits too often
-			if shouldAdjust && attempt == 0 { // Only adjust on first attempt to avoid multiple adjustments
+			// Auto-adjust rate limiter if needed
+			if shouldAdjust := api.trackRateLimitHit(); shouldAdjust && attempt == 0 {
 				api.AdjustRateLimitForOverload()
 			}
 			
 			if attempt < maxRetries-1 {
-				// Fibonacci backoff for 429 errors: 1s, 1s, 2s, 3s, 5s (capped at 30s)
-				delay := fibonacciDelay(attempt, baseDelay)
-				if delay > maxDelay {
-					delay = maxDelay
+				delay := api.calculateRateLimitDelay(attempt, consecutiveRateLimits)
+				api.logRetryAttempt(delay, attempt+1)
+				
+				if err := api.waitWithContext(ctx, delay); err != nil {
+					return nil, err
 				}
-				
-				// Add extra delay if we're hitting rate limits repeatedly
-				if consecutiveRateLimits > 2 {
-					delay = delay * time.Duration(consecutiveRateLimits)
-					if delay > maxDelay {
-						delay = maxDelay
-					}
-				}
-				
-				// Add some jitter to avoid thundering herd
-				jitter := time.Duration(rand.Int63n(int64(delay/4)))
-				finalDelay := delay + jitter
-				
-				// Log the retry attempt (visible to user for transparency)
-				shared.ColorWarning.Printf("⚠️ Rate limit hit (429), retrying in %v (attempt %d/%d)\n", 
-					finalDelay, attempt+1, maxRetries)
-				
-				// Wait before retrying
-				select {
-				case <-time.After(finalDelay):
-					continue
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				}
+				continue
 			}
 		} else {
 			// Handle other HTTP errors (don't retry)
@@ -188,26 +191,94 @@ func (api *DabAPI) requestWithRateLimitRetry(ctx context.Context, url string) (*
 		}
 	}
 	
-	// All retries exhausted
+	return api.handleExhaustedRetries(lastResp, lastErr)
+}
+
+// executeRequest creates and executes a single HTTP request
+func (api *DabAPI) executeRequest(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+	req.Header.Set("User-Agent", shared.UserAgent)
+
+	resp, err := api.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error executing request: %w", err)
+	}
+	
+	return resp, nil
+}
+
+// calculateRateLimitDelay calculates the delay for rate limit retries
+func (api *DabAPI) calculateRateLimitDelay(attempt, consecutiveRateLimits int) time.Duration {
+	delay := fibonacciDelay(attempt, baseRetryDelay)
+	if delay > maxRetryDelay {
+		delay = maxRetryDelay
+	}
+	
+	// Add extra delay for consecutive rate limits
+	if consecutiveRateLimits > 2 {
+		delay = delay * time.Duration(consecutiveRateLimits)
+		if delay > maxRetryDelay {
+			delay = maxRetryDelay
+		}
+	}
+	
+	return addJitter(delay)
+}
+
+// waitWithBackoff waits with Fibonacci backoff for network errors
+func (api *DabAPI) waitWithBackoff(attempt int, baseDelay time.Duration) {
+	delay := fibonacciDelay(attempt, baseDelay)
+	if delay > maxRetryDelay {
+		delay = maxRetryDelay
+	}
+	time.Sleep(delay)
+}
+
+// waitWithContext waits for the specified duration, respecting context cancellation
+func (api *DabAPI) waitWithContext(ctx context.Context, delay time.Duration) error {
+	select {
+	case <-time.After(delay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// logRetryAttempt logs retry attempts for user transparency
+func (api *DabAPI) logRetryAttempt(delay time.Duration, attempt int) {
+	shared.ColorWarning.Printf("⚠️ Rate limit hit (429), retrying in %v (attempt %d/%d)\n", 
+		delay, attempt, maxRetries)
+}
+
+// handleExhaustedRetries handles the case when all retries are exhausted
+func (api *DabAPI) handleExhaustedRetries(lastResp *http.Response, lastErr error) (*http.Response, error) {
 	if lastResp != nil && lastResp.StatusCode == http.StatusTooManyRequests {
 		return nil, fmt.Errorf("rate limit exceeded (429) after %d attempts, server is overloaded - try reducing parallelism", maxRetries)
 	}
-	
 	return nil, fmt.Errorf("request failed after %d attempts: %w", maxRetries, lastErr)
 }
 
+// ============================================================================
+// RATE LIMIT MANAGEMENT
+// ============================================================================
+
 // AdjustRateLimitForOverload reduces the rate limit when server is consistently overloaded
 func (api *DabAPI) AdjustRateLimitForOverload() {
-	// Reduce rate limit to be more conservative: 2 req/sec with burst of 4
-	api.rateLimiter = rate.NewLimiter(rate.Every(500*time.Millisecond), 4)
+	api.rateLimiter = rate.NewLimiter(rate.Every(conservativeRateLimit), conservativeBurstLimit)
 	shared.ColorWarning.Println("⚠️ Adjusted rate limit to be more conservative due to server overload")
 }
 
 // ResetRateLimit resets the rate limit to default values
 func (api *DabAPI) ResetRateLimit() {
-	// Reset to default: 4 req/sec with burst of 8
-	api.rateLimiter = rate.NewLimiter(rate.Every(250*time.Millisecond), 8)
+	api.rateLimiter = rate.NewLimiter(rate.Every(defaultRateLimit), defaultBurstLimit)
 }
+
+// ============================================================================
+// PUBLIC API METHODS
+// ============================================================================
 
 // GetAlbum retrieves album information
 func (api *DabAPI) GetAlbum(ctx context.Context, albumID string) (*shared.Album, error) {
@@ -224,51 +295,8 @@ func (api *DabAPI) GetAlbum(ctx context.Context, albumID string) (*shared.Album,
 		return nil, fmt.Errorf("failed to decode album response: %w", err)
 	}
 
-	// Process tracks to add missing metadata
-	for i := range albumResp.Album.Tracks {
-		track := &albumResp.Album.Tracks[i]
-
-		// Set album information if missing
-		if track.Album == "" {
-			track.Album = albumResp.Album.Title
-		}
-		if track.AlbumArtist == "" {
-			track.AlbumArtist = albumResp.Album.Artist
-		}
-		if track.Genre == "" {
-			track.Genre = albumResp.Album.Genre
-		}
-		if track.ReleaseDate == "" {
-			track.ReleaseDate = albumResp.Album.ReleaseDate
-		}
-		if track.Year == "" && len(albumResp.Album.ReleaseDate) >= 4 {
-			track.Year = albumResp.Album.ReleaseDate[:4]
-		}
-
-		// Set track number if not provided
-		if track.TrackNumber == 0 {
-			track.TrackNumber = i + 1
-		}
-		if track.DiscNumber == 0 {
-			track.DiscNumber = 1
-		}
-	}
-
-	// Set album totals if not provided
-	if albumResp.Album.TotalTracks == 0 {
-		albumResp.Album.TotalTracks = len(albumResp.Album.Tracks)
-	}
-	if albumResp.Album.TotalDiscs == 0 {
-		albumResp.Album.TotalDiscs = 1
-	}
-	if albumResp.Album.Year == "" && len(albumResp.Album.ReleaseDate) >= 4 {
-		albumResp.Album.Year = albumResp.Album.ReleaseDate[:4]
-	}
-
-	// Prepend API endpoint to cover URL if it's a relative path
-	if strings.HasPrefix(albumResp.Album.Cover, "/") {
-		albumResp.Album.Cover = api.endpoint + albumResp.Album.Cover
-	}
+	// Process and normalize album data
+	api.normalizeAlbumData(&albumResp.Album)
 
 	return &albumResp.Album, nil
 }
@@ -364,50 +392,7 @@ func (api *DabAPI) GetArtist(ctx context.Context, artistID string, config *confi
 			}
 			defer sem.Release(1)
 
-			// If album type is not provided by the discography endpoint, fetch full album details
-			if album.Type == "" || len(album.Tracks) == 0 {
-				if debug {
-					fmt.Printf("DEBUG - Worker %d: Fetching full album details for album ID: %s, Title: %s\n", workerID, album.ID, album.Title)
-				} else {
-					shared.ColorInfo.Printf("  Fetching details for album: %s (ID: %s)\n", album.Title, album.ID)
-				}
-				fullAlbum, err := api.GetAlbum(ctx, album.ID)
-				if err != nil {
-					if debug {
-						fmt.Printf("DEBUG - Failed to fetch full album details for %s: %v\n", album.Title, err)
-					}
-					// Continue with heuristic if fetching full album fails
-				} else {
-					// Update album with full details
-					album.Type = fullAlbum.Type
-					album.Tracks = fullAlbum.Tracks
-					album.TotalTracks = fullAlbum.TotalTracks
-					album.TotalDiscs = fullAlbum.TotalDiscs
-					album.Year = fullAlbum.Year
-				}
-			}
-
-			// Auto-detect type if still not provided or tracks were empty
-			if album.Type == "" {
-				trackCount := len(album.Tracks)
-				if trackCount == 0 {
-					album.Type = "album" // Default assumption if no track info
-				} else if trackCount == 1 {
-					album.Type = "single"
-				} else if trackCount <= 6 {
-					album.Type = "ep"
-				} else {
-					album.Type = "album"
-				}
-			}
-
-			// Normalize type to lowercase for consistency
-			album.Type = strings.ToLower(album.Type)
-
-			// Set year if missing
-			if album.Year == "" && len(album.ReleaseDate) >= 4 {
-				album.Year = album.ReleaseDate[:4]
-			}
+			api.processAlbumInParallel(ctx, album, workerID, debug)
 		}(album, i)
 	}
 	wg.Wait()
@@ -605,6 +590,122 @@ func (api *DabAPI) Search(ctx context.Context, query string, searchType string, 
 
 	return results, nil
 }
+
+// ============================================================================
+// HELPER METHODS
+// ============================================================================
+
+// normalizeAlbumData processes and normalizes album and track metadata
+func (api *DabAPI) normalizeAlbumData(album *shared.Album) {
+	// Process tracks to add missing metadata
+	for i := range album.Tracks {
+		track := &album.Tracks[i]
+		api.normalizeTrackData(track, album, i+1)
+	}
+
+	// Set album totals if not provided
+	if album.TotalTracks == 0 {
+		album.TotalTracks = len(album.Tracks)
+	}
+	if album.TotalDiscs == 0 {
+		album.TotalDiscs = 1
+	}
+	if album.Year == "" && len(album.ReleaseDate) >= 4 {
+		album.Year = album.ReleaseDate[:4]
+	}
+
+	// Normalize cover URL
+	if strings.HasPrefix(album.Cover, "/") {
+		album.Cover = api.endpoint + album.Cover
+	}
+}
+
+// normalizeTrackData fills in missing track metadata from album data
+func (api *DabAPI) normalizeTrackData(track *shared.Track, album *shared.Album, trackNumber int) {
+	// Set album information if missing
+	if track.Album == "" {
+		track.Album = album.Title
+	}
+	if track.AlbumArtist == "" {
+		track.AlbumArtist = album.Artist
+	}
+	if track.Genre == "" {
+		track.Genre = album.Genre
+	}
+	if track.ReleaseDate == "" {
+		track.ReleaseDate = album.ReleaseDate
+	}
+	if track.Year == "" && len(album.ReleaseDate) >= 4 {
+		track.Year = album.ReleaseDate[:4]
+	}
+
+	// Set track number if not provided
+	if track.TrackNumber == 0 {
+		track.TrackNumber = trackNumber
+	}
+	if track.DiscNumber == 0 {
+		track.DiscNumber = 1
+	}
+}
+
+// processAlbumInParallel processes album details fetching with proper error handling
+func (api *DabAPI) processAlbumInParallel(ctx context.Context, album *shared.Album, workerID int, debug bool) {
+	// If album type is not provided by the discography endpoint, fetch full album details
+	if album.Type == "" || len(album.Tracks) == 0 {
+		if debug {
+			fmt.Printf("DEBUG - Worker %d: Fetching full album details for album ID: %s, Title: %s\n", workerID, album.ID, album.Title)
+		} else {
+			shared.ColorInfo.Printf("  Fetching details for album: %s (ID: %s)\n", album.Title, album.ID)
+		}
+		
+		fullAlbum, err := api.GetAlbum(ctx, album.ID)
+		if err != nil {
+			if debug {
+				fmt.Printf("DEBUG - Failed to fetch full album details for %s: %v\n", album.Title, err)
+			}
+			// Continue with heuristic if fetching full album fails
+		} else {
+			// Update album with full details
+			album.Type = fullAlbum.Type
+			album.Tracks = fullAlbum.Tracks
+			album.TotalTracks = fullAlbum.TotalTracks
+			album.TotalDiscs = fullAlbum.TotalDiscs
+			album.Year = fullAlbum.Year
+		}
+	}
+
+	// Auto-detect type if still not provided
+	api.detectAlbumType(album)
+	
+	// Normalize type and set year
+	album.Type = strings.ToLower(album.Type)
+	if album.Year == "" && len(album.ReleaseDate) >= 4 {
+		album.Year = album.ReleaseDate[:4]
+	}
+}
+
+// detectAlbumType automatically detects album type based on track count
+func (api *DabAPI) detectAlbumType(album *shared.Album) {
+	if album.Type != "" {
+		return
+	}
+	
+	trackCount := len(album.Tracks)
+	switch {
+	case trackCount == 0:
+		album.Type = "album" // Default assumption if no track info
+	case trackCount == 1:
+		album.Type = "single"
+	case trackCount <= 6:
+		album.Type = "ep"
+	default:
+		album.Type = "album"
+	}
+}
+
+// ============================================================================
+// DEBUG AND TEST METHODS
+// ============================================================================
 
 // TestArtistEndpoints tests different possible artist endpoint formats
 func (api *DabAPI) TestArtistEndpoints(ctx context.Context, artistID string) {
