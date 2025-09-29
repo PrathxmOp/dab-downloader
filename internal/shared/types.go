@@ -13,26 +13,27 @@ type VersionInfo struct {
 
 // Music data structures
 type Track struct {
-	ID            interface{} `json:"id"`
-	Title         string      `json:"title"`
-	Artist        string      `json:"artist"`
-	ArtistId      interface{} `json:"artistId"` // Added ArtistId field
-	Cover         string      `json:"albumCover"`
-	ReleaseDate   string      `json:"releaseDate"`
-	Duration      int         `json:"duration"`
-	Album         string      `json:"album,omitempty"`
-	AlbumTitle    string      `json:"albumTitle,omitempty"`  // For search results
-	AlbumArtist   string      `json:"albumArtist,omitempty"`
-	Genre         string      `json:"genre,omitempty"`
-	TrackNumber   int         `json:"trackNumber,omitempty"`
-	DiscNumber    int         `json:"discNumber,omitempty"`
-	Composer      string      `json:"composer,omitempty"`
-	Producer      string      `json:"producer,omitempty"`
+	ID            interface{}  `json:"id"`
+	Title         string       `json:"title"`
+	Artist        string       `json:"artist"`
+	ArtistId      interface{}  `json:"artistId"` // Added ArtistId field
+	Cover         string       `json:"albumCover"`
+	ReleaseDate   string       `json:"releaseDate"`
+	Duration      int          `json:"duration"`
+	Album         string       `json:"album,omitempty"`
+	AlbumTitle    string       `json:"albumTitle,omitempty"`  // For search results
+	AlbumArtist   string       `json:"albumArtist,omitempty"`
+	Genre         string       `json:"genre,omitempty"`
+	TrackNumber   int          `json:"trackNumber,omitempty"`
+	DiscNumber    int          `json:"discNumber,omitempty"`
+	Composer      string       `json:"composer,omitempty"`
+	Producer      string       `json:"producer,omitempty"`
 	Year          string      `json:"year,omitempty"`
-	ISRC          string      `json:"isrc,omitempty"`
-	Copyright     string      `json:"copyright,omitempty"`
-	AlbumID       string      `json:"albumId"`                   // Added AlbumID field
-	MusicBrainzID string      `json:"musicbrainzId,omitempty"`   // MusicBrainz ID for the track
+	ISRC          string       `json:"isrc,omitempty"`
+	Copyright     string       `json:"copyright,omitempty"`
+	AlbumID       string       `json:"albumId"`                   // Added AlbumID field
+	MusicBrainzID string       `json:"musicbrainzId,omitempty"`   // MusicBrainz ID for the track
+	AudioQuality  AudioQuality `json:"audioQuality,omitempty"`
 }
 
 type Artist struct {
@@ -46,22 +47,29 @@ type Artist struct {
 	Followers int         `json:"followers,omitempty"`
 }
 
+type AudioQuality struct {
+	MaximumBitDepth     int     `json:"maximumBitDepth,omitempty"`
+	MaximumSamplingRate float64 `json:"maximumSamplingRate,omitempty"`
+	IsHiRes             bool    `json:"isHiRes,omitempty"`
+}
+
 type Album struct {
-	ID            string      `json:"id"`
-	Title         string      `json:"title"`
-	Artist        string      `json:"artist"`
-	Cover         string      `json:"cover"`
-	ReleaseDate   string      `json:"releaseDate"`
-	Tracks        []Track     `json:"tracks"`
-	Genre         string      `json:"genre,omitempty"`
-	Type          string      `json:"type,omitempty"` // "album", "ep", "single", etc.
-	Label         interface{} `json:"label,omitempty"`
-	UPC           string      `json:"upc,omitempty"`
-	Copyright     string      `json:"copyright,omitempty"`
-	Year          string      `json:"year,omitempty"`
-	TotalTracks   int         `json:"totalTracks,omitempty"`
-	TotalDiscs    int         `json:"totalDiscs,omitempty"`
-	MusicBrainzID string      `json:"musicbrainzId,omitempty"` // MusicBrainz ID for the album
+	ID            string       `json:"id"`
+	Title         string       `json:"title"`
+	Artist        string       `json:"artist"`
+	Cover         string       `json:"cover"`
+	ReleaseDate   string       `json:"releaseDate"`
+	Tracks        []Track      `json:"tracks"`
+	Genre         string       `json:"genre,omitempty"`
+	Type          string       `json:"type,omitempty"` // "album", "ep", "single", etc.
+	Label         interface{}  `json:"label,omitempty"`
+	UPC           string       `json:"upc,omitempty"`
+	Copyright     string       `json:"copyright,omitempty"`
+	Year          string       `json:"year,omitempty"`
+	TotalTracks   int          `json:"totalTracks,omitempty"`
+	TotalDiscs    int          `json:"totalDiscs,omitempty"`
+	MusicBrainzID string       `json:"musicbrainzId,omitempty"` // MusicBrainz ID for the album
+	AudioQuality  AudioQuality `json:"audioQuality,omitempty"`
 }
 
 // API response structures

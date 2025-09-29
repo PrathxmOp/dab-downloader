@@ -333,3 +333,104 @@ func CheckFFmpeg() bool {
 	_, err := exec.LookPath("ffmpeg")
 	return err == nil
 }
+
+// FormatBitrateInfo formats audio quality information with colors
+func FormatBitrateInfo(audioQuality AudioQuality) string {
+	if audioQuality.MaximumSamplingRate == 0 && audioQuality.MaximumBitDepth == 0 {
+		return ""
+	}
+	
+	// Format sampling rate (remove .0 if it's a whole number)
+	var samplingRateStr string
+	if audioQuality.MaximumSamplingRate == float64(int(audioQuality.MaximumSamplingRate)) {
+		samplingRateStr = fmt.Sprintf("%.0f", audioQuality.MaximumSamplingRate)
+	} else {
+		samplingRateStr = fmt.Sprintf("%.1f", audioQuality.MaximumSamplingRate)
+	}
+	
+	bitrateInfo := fmt.Sprintf("[%s/%d]", samplingRateStr, audioQuality.MaximumBitDepth)
+	
+	// Color the bitrate info based on quality
+	if audioQuality.IsHiRes || audioQuality.MaximumBitDepth >= 24 || audioQuality.MaximumSamplingRate > 48.0 {
+		return ColorSuccess.Sprint(bitrateInfo) // Green for hi-res
+	} else if audioQuality.MaximumBitDepth >= 16 {
+		return ColorWarning.Sprint(bitrateInfo) // Yellow for CD quality
+	} else {
+		return ColorError.Sprint(bitrateInfo) // Red for lower quality
+	}
+}
+
+// GetTerminalWidth returns the terminal width, defaulting to 80 if unable to determine
+func GetTerminalWidth() int {
+	// Try to get terminal width from environment or use a reasonable default
+	if IsTTY() {
+		// For now, use a reasonable default. In a full implementation, you might use
+		// a library like golang.org/x/term to get actual terminal dimensions
+		return 100
+	}
+	return 80
+}
+
+// FormatAlbumWithBitrate formats an album line with right-aligned bitrate info
+func FormatAlbumWithBitrate(prefix, title, artist, date string, audioQuality AudioQuality) string {
+	bitrateInfo := FormatBitrateInfo(audioQuality)
+	if bitrateInfo == "" {
+		return fmt.Sprintf("%s%s - %s (%s)", prefix, title, artist, date)
+	}
+	
+	// Calculate the main text without bitrate
+	mainText := fmt.Sprintf("%s%s - %s (%s)", prefix, title, artist, date)
+	
+	// Get terminal width and calculate spacing
+	termWidth := GetTerminalWidth()
+	
+	// Account for ANSI color codes in bitrate info (approximately 10-15 chars)
+	// We'll use the raw bitrate length for spacing calculation
+	rawBitrateLen := len(fmt.Sprintf("[%s/%d]", 
+		func() string {
+			if audioQuality.MaximumSamplingRate == float64(int(audioQuality.MaximumSamplingRate)) {
+				return fmt.Sprintf("%.0f", audioQuality.MaximumSamplingRate)
+			}
+			return fmt.Sprintf("%.1f", audioQuality.MaximumSamplingRate)
+		}(), audioQuality.MaximumBitDepth))
+	
+	// Calculate spacing needed
+	spacesNeeded := termWidth - len(mainText) - rawBitrateLen - 1
+	if spacesNeeded < 1 {
+		spacesNeeded = 1 // At least one space
+	}
+	
+	return fmt.Sprintf("%s%s%s", mainText, strings.Repeat(" ", spacesNeeded), bitrateInfo)
+}
+
+// FormatTrackWithBitrate formats a track line with right-aligned bitrate info
+func FormatTrackWithBitrate(prefix, title, artist, album string, audioQuality AudioQuality) string {
+	bitrateInfo := FormatBitrateInfo(audioQuality)
+	if bitrateInfo == "" {
+		return fmt.Sprintf("%s%s - %s (%s)", prefix, title, artist, album)
+	}
+	
+	// Calculate the main text without bitrate
+	mainText := fmt.Sprintf("%s%s - %s (%s)", prefix, title, artist, album)
+	
+	// Get terminal width and calculate spacing
+	termWidth := GetTerminalWidth()
+	
+	// Account for ANSI color codes in bitrate info (approximately 10-15 chars)
+	// We'll use the raw bitrate length for spacing calculation
+	rawBitrateLen := len(fmt.Sprintf("[%s/%d]", 
+		func() string {
+			if audioQuality.MaximumSamplingRate == float64(int(audioQuality.MaximumSamplingRate)) {
+				return fmt.Sprintf("%.0f", audioQuality.MaximumSamplingRate)
+			}
+			return fmt.Sprintf("%.1f", audioQuality.MaximumSamplingRate)
+		}(), audioQuality.MaximumBitDepth))
+	
+	// Calculate spacing needed
+	spacesNeeded := termWidth - len(mainText) - rawBitrateLen - 1
+	if spacesNeeded < 1 {
+		spacesNeeded = 1 // At least one space
+	}
+	
+	return fmt.Sprintf("%s%s%s", mainText, strings.Repeat(" ", spacesNeeded), bitrateInfo)
+}

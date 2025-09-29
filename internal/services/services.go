@@ -184,8 +184,10 @@ func (ds *DownloadService) DownloadArtist(ctx context.Context, artistID string, 
 	// Show confirmation if not skipped
 	if !noConfirm {
 		ds.logger.Info("Found %d albums to download:", len(filteredAlbums))
-		for _, album := range filteredAlbums {
-			ds.logger.Info("  - %s (%s)", album.Title, album.Type)
+		for i, album := range filteredAlbums {
+			prefix := fmt.Sprintf("%d. [%s] ", i+1, strings.ToUpper(album.Type))
+			formattedLine := shared.FormatAlbumWithBitrate(prefix, album.Title, album.Artist, album.ReleaseDate, album.AudioQuality)
+			fmt.Println(formattedLine)
 		}
 		
 		confirmation := shared.GetUserInput("Continue with download? (y/n)", "y")

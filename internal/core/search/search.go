@@ -52,14 +52,23 @@ func HandleSearch(ctx context.Context, api *dab.DabAPI, query string, searchType
 	if len(results.Albums) > 0 {
 		shared.ColorInfo.Println("\n--- Albums ---")
 		for _, album := range results.Albums {
-			fmt.Printf("%d. %s - %s\n", counter, album.Title, album.Artist)
+			prefix := fmt.Sprintf("%d. ", counter)
+			formattedLine := shared.FormatAlbumWithBitrate(prefix, album.Title, album.Artist, "", album.AudioQuality)
+			fmt.Println(formattedLine)
 			counter++
 		}
 	}
 	if len(results.Tracks) > 0 {
 		shared.ColorInfo.Println("\n--- Tracks ---")
 		for _, track := range results.Tracks {
-			fmt.Printf("%d. %s - %s (%s)\n", counter, track.Title, track.Artist, track.Album)
+			prefix := fmt.Sprintf("%d. ", counter)
+			// Use AlbumTitle if available, fallback to Album
+			albumName := track.AlbumTitle
+			if albumName == "" {
+				albumName = track.Album
+			}
+			formattedLine := shared.FormatTrackWithBitrate(prefix, track.Title, track.Artist, albumName, track.AudioQuality)
+			fmt.Println(formattedLine)
 			counter++
 		}
 	}
