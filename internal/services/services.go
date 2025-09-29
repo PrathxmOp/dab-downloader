@@ -167,6 +167,24 @@ func (ds *DownloadService) DownloadAlbum(ctx context.Context, albumID string, cf
 	return ds.DownloadTracks(ctx, album.Tracks, album, cfg, debug, format, bitrate)
 }
 
+func (ds *DownloadService) GetArtistInfo(ctx context.Context, artistID string, cfg *config.Config, debug bool) (*shared.Artist, error) {
+	// Get artist information
+	artist, err := ds.apiClient.GetArtist(ctx, artistID, cfg, debug)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get artist: %w", err)
+	}
+	return artist, nil
+}
+
+func (ds *DownloadService) GetAlbumInfo(ctx context.Context, albumID string, cfg *config.Config, debug bool) (*shared.Album, error) {
+	// Get album information
+	album, err := ds.apiClient.GetAlbum(ctx, albumID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get album: %w", err)
+	}
+	return album, nil
+}
+
 func (ds *DownloadService) DownloadArtist(ctx context.Context, artistID string, cfg *config.Config, debug bool, format string, bitrate string, filter string, noConfirm bool) (*shared.DownloadStats, error) {
 	// Get artist information
 	artist, err := ds.apiClient.GetArtist(ctx, artistID, cfg, debug)
@@ -318,8 +336,8 @@ func NewSearchService(apiClient interfaces.APIClient) *SearchService {
 	}
 }
 
-func (ss *SearchService) HandleSearch(ctx context.Context, query string, searchType string, debug bool, auto bool) ([]interface{}, []string, error) {
-	return search.HandleSearch(ctx, ss.apiClient.(*dab.DabAPI), query, searchType, debug, auto)
+func (ss *SearchService) HandleSearch(ctx context.Context, query string, searchType string, debug bool, auto bool, cfg *config.Config) ([]interface{}, []string, error) {
+	return search.HandleSearch(ctx, ss.apiClient.(*dab.DabAPI), query, searchType, debug, auto, cfg)
 }
 
 func (ss *SearchService) Search(ctx context.Context, query string, searchType string, limit int, debug bool) (*shared.SearchResults, error) {

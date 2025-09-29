@@ -6,9 +6,10 @@ import (
 	
 	"dab-downloader/internal/shared"
 	"dab-downloader/internal/api/dab"
+	"dab-downloader/internal/config"
 )
 
-func HandleSearch(ctx context.Context, api *dab.DabAPI, query string, searchType string, debug bool, auto bool) ([]interface{}, []string, error) {
+func HandleSearch(ctx context.Context, api *dab.DabAPI, query string, searchType string, debug bool, auto bool, cfg *config.Config) ([]interface{}, []string, error) {
 	shared.ColorInfo.Printf("🔎 Searching for '%s' (type: %s)...", query, searchType)
 
 	results, err := api.Search(ctx, query, searchType, 10, debug)

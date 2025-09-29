@@ -340,11 +340,18 @@ func FormatBitrateInfo(audioQuality AudioQuality) string {
 		return ""
 	}
 	
-	// Format sampling rate (remove .0 if it's a whole number)
+	// Format sampling rate with proper alignment
 	var samplingRateStr string
 	if audioQuality.MaximumSamplingRate == float64(int(audioQuality.MaximumSamplingRate)) {
-		samplingRateStr = fmt.Sprintf("%.0f", audioQuality.MaximumSamplingRate)
+		// Whole number sampling rates
+		intRate := int(audioQuality.MaximumSamplingRate)
+		if intRate < 100 { // 24, 48, 96 need extra space for alignment
+			samplingRateStr = fmt.Sprintf(" %d", intRate)
+		} else {
+			samplingRateStr = fmt.Sprintf("%d", intRate)
+		}
 	} else {
+		// Decimal sampling rates (like 44.1)
 		samplingRateStr = fmt.Sprintf("%.1f", audioQuality.MaximumSamplingRate)
 	}
 	
@@ -358,6 +365,30 @@ func FormatBitrateInfo(audioQuality AudioQuality) string {
 	} else {
 		return ColorError.Sprint(bitrateInfo) // Red for lower quality
 	}
+}
+
+// calculateRawBitrateLength calculates the length of bitrate info without ANSI color codes
+func calculateRawBitrateLength(audioQuality AudioQuality) int {
+	if audioQuality.MaximumSamplingRate == 0 && audioQuality.MaximumBitDepth == 0 {
+		return 0
+	}
+	
+	// Use the same logic as FormatBitrateInfo for consistency
+	var samplingRateStr string
+	if audioQuality.MaximumSamplingRate == float64(int(audioQuality.MaximumSamplingRate)) {
+		// Whole number sampling rates
+		intRate := int(audioQuality.MaximumSamplingRate)
+		if intRate < 100 { // 24, 48, 96 need extra space for alignment
+			samplingRateStr = fmt.Sprintf(" %d", intRate)
+		} else {
+			samplingRateStr = fmt.Sprintf("%d", intRate)
+		}
+	} else {
+		// Decimal sampling rates (like 44.1)
+		samplingRateStr = fmt.Sprintf("%.1f", audioQuality.MaximumSamplingRate)
+	}
+	
+	return len(fmt.Sprintf("[%s/%d]", samplingRateStr, audioQuality.MaximumBitDepth))
 }
 
 // GetTerminalWidth returns the terminal width, defaulting to 80 if unable to determine
@@ -384,15 +415,8 @@ func FormatAlbumWithBitrate(prefix, title, artist, date string, audioQuality Aud
 	// Get terminal width and calculate spacing
 	termWidth := GetTerminalWidth()
 	
-	// Account for ANSI color codes in bitrate info (approximately 10-15 chars)
-	// We'll use the raw bitrate length for spacing calculation
-	rawBitrateLen := len(fmt.Sprintf("[%s/%d]", 
-		func() string {
-			if audioQuality.MaximumSamplingRate == float64(int(audioQuality.MaximumSamplingRate)) {
-				return fmt.Sprintf("%.0f", audioQuality.MaximumSamplingRate)
-			}
-			return fmt.Sprintf("%.1f", audioQuality.MaximumSamplingRate)
-		}(), audioQuality.MaximumBitDepth))
+	// Calculate raw bitrate length for spacing calculation
+	rawBitrateLen := calculateRawBitrateLength(audioQuality)
 	
 	// Calculate spacing needed
 	spacesNeeded := termWidth - len(mainText) - rawBitrateLen - 1
@@ -401,6 +425,108 @@ func FormatAlbumWithBitrate(prefix, title, artist, date string, audioQuality Aud
 	}
 	
 	return fmt.Sprintf("%s%s%s", mainText, strings.Repeat(" ", spacesNeeded), bitrateInfo)
+}
+
+// FormatAlbumWithTrackCount formats an album line with track count and right-aligned bitrate info
+func FormatAlbumWithTrackCount(prefix, title, artist, date, trackCount string, audioQuality AudioQuality) string {
+	bitrateInfo := FormatBitrateInfo(audioQuality)
+	
+	// Calculate the main text without track count and bitrate
+	mainText := fmt.Sprintf("%s%s - %s (%s)", prefix, title, artist, date)
+	
+	// If no bitrate info, just append track count
+	if bitrateInfo == "" {
+		return fmt.Sprintf("%s %s", mainText, trackCount)
+	}
+	
+	// Get terminal width and calculate spacing
+	termWidth := GetTerminalWidth()
+	
+	// Calculate raw lengths for spacing (without ANSI color codes)
+	rawBitrateLen := calculateRawBitrateLength(audioQuality)
+	
+	// Estimate raw track count length (without ANSI color codes)
+	// Simple estimation: "[X Track]" or "[XX Tracks]"
+	rawTrackCountLen := 9 // Reasonable estimate for "[X Track]" or "[XX Tracks]"
+	if strings.Contains(trackCount, "Tracks]") {
+		rawTrackCountLen = 11 // "[XX Tracks]"
+	}
+	
+	// Calculate spacing needed between main text and track count + bitrate
+	totalRightSideLen := rawTrackCountLen + 1 + rawBitrateLen // +1 for space between track count and bitrate
+	spacesNeeded := termWidth - len(mainText) - totalRightSideLen - 1
+	if spacesNeeded < 1 {
+		spacesNeeded = 1 // At least one space
+	}
+	
+	return fmt.Sprintf("%s%s%s %s", mainText, strings.Repeat(" ", spacesNeeded), trackCount, bitrateInfo)
+}
+
+// FormatAlbumWithTrackCountProfessional formats an album line with professional styling and better alignment
+func FormatAlbumWithTrackCountProfessional(prefix, title, artist, date, trackCount string, audioQuality AudioQuality) string {
+	bitrateInfo := FormatBitrateInfo(audioQuality)
+	
+	// Create the main album info with better formatting
+	// Use a more subtle separator and better typography
+	albumInfo := fmt.Sprintf("%s • %s", title, artist)
+	if date != "" {
+		albumInfo = fmt.Sprintf("%s (%s)", albumInfo, date)
+	}
+	
+	// Combine prefix with album info
+	mainText := fmt.Sprintf("%s%s", prefix, albumInfo)
+	
+	// Handle very long titles by truncating if necessary
+	termWidthForTrunc := GetTerminalWidth()
+	if termWidthForTrunc < 100 {
+		termWidthForTrunc = 100
+	}
+	maxMainTextLen := termWidthForTrunc - 30 // Reserve space for track count and bitrate
+	if len(mainText) > maxMainTextLen {
+		// Truncate and add ellipsis
+		mainText = mainText[:maxMainTextLen-3] + "..."
+	}
+	
+	// If no bitrate info, just append track count with some spacing
+	if bitrateInfo == "" {
+		// Add some padding for better alignment
+		spacesNeeded := 80 - len(mainText) - 12 // Estimate for track count
+		if spacesNeeded < 2 {
+			spacesNeeded = 2
+		}
+		return fmt.Sprintf("%s%s%s", mainText, strings.Repeat(" ", spacesNeeded), trackCount)
+	}
+	
+	// Get terminal width and calculate spacing for professional alignment
+	termWidth := GetTerminalWidth()
+	if termWidth < 100 {
+		termWidth = 100 // Minimum width for professional display
+	}
+	
+	// Calculate raw lengths for spacing (without ANSI color codes)
+	rawBitrateLen := calculateRawBitrateLength(audioQuality)
+	
+	// Estimate raw track count length (without ANSI color codes)
+	// New format: "[ 1 Track ]" or "[ X Tracks]" or "[XX Tracks]"
+	rawTrackCountLen := 11 // Reasonable estimate for "[ X Tracks]" or "[XX Tracks]"
+	if strings.Contains(trackCount, " 1 Track ]") {
+		rawTrackCountLen = 10 // "[ 1 Track ]"
+	}
+	
+	// Calculate spacing for better alignment
+	// Reserve space for track count + space + bitrate
+	rightSideLen := rawTrackCountLen + 1 + rawBitrateLen
+	availableSpace := termWidth - len(mainText) - rightSideLen
+	
+	// Ensure minimum spacing
+	if availableSpace < 2 {
+		availableSpace = 2
+	}
+	
+	// Create clean spacing for professional alignment
+	spacing := strings.Repeat(" ", availableSpace)
+	
+	return fmt.Sprintf("%s%s%s %s", mainText, spacing, trackCount, bitrateInfo)
 }
 
 // FormatTrackWithBitrate formats a track line with right-aligned bitrate info
@@ -416,15 +542,8 @@ func FormatTrackWithBitrate(prefix, title, artist, album string, audioQuality Au
 	// Get terminal width and calculate spacing
 	termWidth := GetTerminalWidth()
 	
-	// Account for ANSI color codes in bitrate info (approximately 10-15 chars)
-	// We'll use the raw bitrate length for spacing calculation
-	rawBitrateLen := len(fmt.Sprintf("[%s/%d]", 
-		func() string {
-			if audioQuality.MaximumSamplingRate == float64(int(audioQuality.MaximumSamplingRate)) {
-				return fmt.Sprintf("%.0f", audioQuality.MaximumSamplingRate)
-			}
-			return fmt.Sprintf("%.1f", audioQuality.MaximumSamplingRate)
-		}(), audioQuality.MaximumBitDepth))
+	// Calculate raw bitrate length for spacing calculation
+	rawBitrateLen := calculateRawBitrateLength(audioQuality)
 	
 	// Calculate spacing needed
 	spacesNeeded := termWidth - len(mainText) - rawBitrateLen - 1

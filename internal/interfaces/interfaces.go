@@ -34,6 +34,12 @@ type APIClient interface {
 
 // DownloadService defines the interface for download operations
 type DownloadService interface {
+	// GetArtistInfo retrieves artist information and discography by ID
+	GetArtistInfo(ctx context.Context, artistID string, config *config.Config, debug bool) (*shared.Artist, error)
+	
+	// GetAlbumInfo retrieves album information by ID
+	GetAlbumInfo(ctx context.Context, albumID string, config *config.Config, debug bool) (*shared.Album, error)
+	
 	// DownloadAlbum downloads an entire album by ID
 	DownloadAlbum(ctx context.Context, albumID string, config *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error)
 	
@@ -53,7 +59,7 @@ type DownloadService interface {
 // SearchService defines the interface for search operations
 type SearchService interface {
 	// HandleSearch performs a search and handles user interaction for selection
-	HandleSearch(ctx context.Context, query string, searchType string, debug bool, auto bool) ([]interface{}, []string, error)
+	HandleSearch(ctx context.Context, query string, searchType string, debug bool, auto bool, config *config.Config) ([]interface{}, []string, error)
 	
 	// Search performs a raw search without user interaction
 	Search(ctx context.Context, query string, searchType string, limit int, debug bool) (*shared.SearchResults, error)
