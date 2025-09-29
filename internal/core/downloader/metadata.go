@@ -9,9 +9,10 @@ import (
 	"github.com/go-flac/flacvorbis"
 	
 	"dab-downloader/internal/shared"
+	"dab-downloader/internal/api/musicbrainz"
 )
 
-var mbClient = shared.NewMusicBrainzClientWithDebug(false) // Global instance of MusicBrainzClient
+var mbClient = musicbrainz.NewMusicBrainzClientWithDebug(false) // Global instance of MusicBrainzClient
 
 // SetMusicBrainzDebug sets debug mode for the global MusicBrainz client
 func SetMusicBrainzDebug(debug bool) {
@@ -20,13 +21,13 @@ func SetMusicBrainzDebug(debug bool) {
 
 // AlbumMetadataCache holds cached MusicBrainz release metadata for albums
 type AlbumMetadataCache struct {
-	releases map[string]*shared.MusicBrainzRelease // key: "artist|album"
+	releases map[string]*musicbrainz.MusicBrainzRelease // key: "artist|album"
 	mu       sync.RWMutex
 }
 
 // Global cache instance
 var albumCache = &AlbumMetadataCache{
-	releases: make(map[string]*shared.MusicBrainzRelease),
+	releases: make(map[string]*musicbrainz.MusicBrainzRelease),
 }
 
 // getCacheKey generates a cache key for an album
@@ -35,14 +36,14 @@ func getCacheKey(artist, album string) string {
 }
 
 // GetCachedRelease retrieves cached release metadata
-func (cache *AlbumMetadataCache) GetCachedRelease(artist, album string) *shared.MusicBrainzRelease {
+func (cache *AlbumMetadataCache) GetCachedRelease(artist, album string) *musicbrainz.MusicBrainzRelease {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
 	return cache.releases[getCacheKey(artist, album)]
 }
 
 // SetCachedRelease stores release metadata in cache
-func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release *shared.MusicBrainzRelease) {
+func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release *musicbrainz.MusicBrainzRelease) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	cache.releases[getCacheKey(artist, album)] = release
@@ -52,7 +53,7 @@ func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release 
 func (cache *AlbumMetadataCache) ClearCache() {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	cache.releases = make(map[string]*shared.MusicBrainzRelease)
+	cache.releases = make(map[string]*musicbrainz.MusicBrainzRelease)
 }
 
 // AddMetadata adds comprehensive metadata to a FLAC file
