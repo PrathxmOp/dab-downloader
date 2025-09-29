@@ -143,7 +143,7 @@ cd dab-downloader
 
 # Install dependencies and build
 go mod tidy
-go build -o dab-downloader
+go build -o dab-downloader ./cmd/dab-downloader
 ```
 
 ### Option 4: Docker (Containerized)
@@ -514,18 +514,41 @@ Due to the unstable nature of this project and it being a solo-developed tool, c
 
 ## 🏗️ Project Architecture
 
+The project follows Go standard layout with organized internal packages:
+
 ```
 dab-downloader/
-├── main.go              # CLI entry point
-├── search.go            # Search functionality
-├── api.go               # DAB API client
-├── downloader.go        # Download engine
-├── artist_downloader.go # Artist catalog handling
-├── metadata.go          # FLAC metadata processing
-├── spotify.go           # Spotify integration
-├── navidrome.go         # Navidrome integration
-├── utils.go             # Utility functions
-└── docker-compose.yml   # Container setup
+├── cmd/dab-downloader/          # CLI application entry point
+│   ├── main.go                  # Application bootstrap
+│   ├── app.go                   # Application lifecycle management
+│   ├── interfaces.go            # Application interfaces
+│   └── commands/                # CLI command implementations
+│       ├── root.go              # Root command setup
+│       ├── album.go             # Album download command
+│       ├── artist.go            # Artist download command
+│       ├── search.go            # Search command
+│       ├── spotify.go           # Spotify integration command
+│       ├── navidrome.go         # Navidrome integration command
+│       ├── server.go            # Server mode command
+│       ├── debug.go             # Debug utilities command
+│       └── version.go           # Version command
+├── internal/                    # Private application packages
+│   ├── api/                     # External API clients
+│   │   ├── dab/                 # DAB music API client
+│   │   ├── spotify/             # Spotify Web API client
+│   │   ├── navidrome/           # Navidrome server API client
+│   │   └── musicbrainz/         # MusicBrainz metadata API client
+│   ├── core/                    # Core business logic
+│   │   ├── downloader/          # Download engine and processing
+│   │   ├── search/              # Search functionality
+│   │   └── updater/             # Application update logic
+│   ├── config/                  # Configuration management
+│   ├── shared/                  # Shared utilities and types
+│   ├── interfaces/              # Application-wide interfaces
+│   └── services/                # Service layer orchestration
+├── config/                      # Configuration files
+├── docs/                        # Documentation
+└── docker-compose.yml           # Container setup
 ```
 
 🤝 Contributing

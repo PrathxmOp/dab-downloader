@@ -4,4 +4,10 @@ config.json
 dab-downloader-linux-amd64
 *.md
 !README.md
+!docs/PROJECT_STRUCTURE.md
+!docs/DEVELOPMENT_GUIDE.md
+!docs/API_DOCUMENTATION.md
 verification_test.go
+.DS_Store
+*.kiro*
+*.vscode
