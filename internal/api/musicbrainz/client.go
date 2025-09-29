@@ -53,7 +53,7 @@ func NewMusicBrainzClientWithConfig(config MusicBrainzConfig) *MusicBrainzClient
 		},
 		config: config,
 		debug:  false,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
+		rateLimiter: rate.NewLimiter(rate.Every(333*time.Millisecond), 6),
 		baseURL: musicBrainzAPI,
 	}
 }
@@ -66,7 +66,7 @@ func NewMusicBrainzClientWithDebug(debug bool) *MusicBrainzClient {
 		},
 		config: DefaultMusicBrainzConfig(),
 		debug:  debug,
-		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
+		rateLimiter: rate.NewLimiter(rate.Every(333*time.Millisecond), 6),
 		baseURL: musicBrainzAPI,
 	}
 }

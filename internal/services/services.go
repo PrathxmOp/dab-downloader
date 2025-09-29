@@ -214,24 +214,240 @@ func (ds *DownloadService) DownloadArtist(ctx context.Context, artistID string, 
 		}
 	}
 	
-	// Download all albums
+	// Download all albums with parallelism
 	totalStats := &shared.DownloadStats{}
-	for _, album := range filteredAlbums {
-		albumStats, err := ds.DownloadAlbum(ctx, album.ID, cfg, debug, format, bitrate)
-		if err != nil {
-			ds.logger.Error("Failed to download album %s: %v", album.Title, err)
-			totalStats.FailedCount++
-			totalStats.FailedItems = append(totalStats.FailedItems, album.Title)
-			continue
+	
+	// Use parallelism from config, default to 1 if not set or invalid
+	maxWorkers := 1
+	if cfg != nil && cfg.Parallelism > 0 {
+		maxWorkers = cfg.Parallelism
+		// Cap at reasonable maximum to avoid overwhelming the server
+		if maxWorkers > 10 {
+			maxWorkers = 10
+			if debug {
+				ds.logger.Warning("Parallelism capped at 10 workers to avoid server overload")
+			}
 		}
-		
+	}
+	
+	if debug {
+		ds.logger.Info("Using parallelism setting: %d workers for %d albums", maxWorkers, len(filteredAlbums))
+	}
+	
+	// If only one album or parallelism is 1, download sequentially
+	if len(filteredAlbums) == 1 || maxWorkers == 1 {
+		for _, album := range filteredAlbums {
+			albumStats, err := ds.DownloadAlbum(ctx, album.ID, cfg, debug, format, bitrate)
+			if err != nil {
+				ds.logger.Error("Failed to download album %s: %v", album.Title, err)
+				totalStats.FailedCount++
+				totalStats.FailedItems = append(totalStats.FailedItems, album.Title)
+				continue
+			}
+			
+			totalStats.SuccessCount += albumStats.SuccessCount
+			totalStats.SkippedCount += albumStats.SkippedCount
+			totalStats.FailedCount += albumStats.FailedCount
+			totalStats.FailedItems = append(totalStats.FailedItems, albumStats.FailedItems...)
+		}
+	} else {
+		// Download albums in parallel
+		totalStats = ds.downloadAlbumsParallel(ctx, filteredAlbums, cfg, debug, format, bitrate, maxWorkers)
+	}
+	
+	return totalStats, nil
+}
+
+// downloadAlbumsParallel downloads multiple albums concurrently using a worker pool
+func (ds *DownloadService) downloadAlbumsParallel(ctx context.Context, albums []shared.Album, cfg *config.Config, debug bool, format string, bitrate string, maxWorkers int) *shared.DownloadStats {
+	totalStats := &shared.DownloadStats{}
+	
+	// Create channels for work distribution
+	albumJobs := make(chan shared.Album, len(albums))
+	results := make(chan *shared.DownloadStats, len(albums))
+	
+	// Start worker goroutines
+	for i := 0; i < maxWorkers; i++ {
+		go func(workerID int) {
+			for album := range albumJobs {
+				if debug {
+					ds.logger.Info("Worker %d: Starting download for album %s by %s", workerID, album.Title, album.Artist)
+				}
+				
+				albumStats, err := ds.DownloadAlbum(ctx, album.ID, cfg, debug, format, bitrate)
+				if err != nil {
+					ds.logger.Error("Worker %d: Failed to download album %s: %v", workerID, album.Title, err)
+					// Create error stats
+					albumStats = &shared.DownloadStats{
+						FailedCount: 1,
+						FailedItems: []string{album.Title},
+					}
+				}
+				
+				results <- albumStats
+			}
+		}(i)
+	}
+	
+	// Send all albums to the job queue
+	for _, album := range albums {
+		albumJobs <- album
+	}
+	close(albumJobs)
+	
+	// Collect results from all workers
+	for i := 0; i < len(albums); i++ {
+		albumStats := <-results
 		totalStats.SuccessCount += albumStats.SuccessCount
 		totalStats.SkippedCount += albumStats.SkippedCount
 		totalStats.FailedCount += albumStats.FailedCount
 		totalStats.FailedItems = append(totalStats.FailedItems, albumStats.FailedItems...)
 	}
 	
-	return totalStats, nil
+	return totalStats
+}
+
+// trackDownloadResult represents the result of a track download operation
+type trackDownloadResult struct {
+	track   shared.Track
+	success bool
+	skipped bool
+	err     error
+}
+
+// downloadTracksParallel downloads multiple tracks concurrently using a worker pool with optimized metadata handling
+func (ds *DownloadService) downloadTracksParallel(ctx context.Context, tracks []shared.Track, album *shared.Album, coverData []byte, cfg *config.Config, debug bool, format string, bitrate string, maxWorkers int, stats *shared.DownloadStats) {
+	// Create channels for work distribution
+	trackJobs := make(chan shared.Track, len(tracks))
+	results := make(chan trackDownloadResult, len(tracks))
+	
+	// Start worker goroutines
+	for i := 0; i < maxWorkers; i++ {
+		go func(workerID int) {
+			for track := range trackJobs {
+				result := trackDownloadResult{track: track}
+				
+				// Use the new method that supports naming masks
+				outputPath := ds.fileSystem.(*FileSystemService).GetDownloadPathWithTrack(track, album, format, cfg)
+				
+				// Check if file already exists
+				if ds.fileSystem.FileExists(outputPath) {
+					if debug {
+						ds.logger.Info("Worker %d: Skipping %s - already exists", workerID, track.Title)
+					}
+					result.skipped = true
+					results <- result
+					continue
+				}
+				
+				// Download the track (this already includes metadata addition)
+				// The metadata was pre-fetched earlier, so this should be faster
+				_, err := downloader.DownloadTrack(ctx, ds.apiClient.(*dab.DabAPI), track, album, outputPath, coverData, nil, debug, format, bitrate, cfg, ds.warningCollector.(*shared.WarningCollector))
+				if err != nil {
+					if debug {
+						ds.logger.Error("Worker %d: Failed to download %s: %v", workerID, track.Title, err)
+					}
+					result.err = err
+				} else {
+					result.success = true
+					if debug {
+						ds.logger.Info("Worker %d: Successfully downloaded %s", workerID, track.Title)
+					}
+				}
+				
+				results <- result
+			}
+		}(i)
+	}
+	
+	// Send all tracks to the job queue
+	for _, track := range tracks {
+		trackJobs <- track
+	}
+	close(trackJobs)
+	
+	// Collect results from all workers
+	for i := 0; i < len(tracks); i++ {
+		result := <-results
+		if result.skipped {
+			stats.SkippedCount++
+		} else if result.success {
+			stats.SuccessCount++
+		} else {
+			stats.FailedCount++
+			stats.FailedItems = append(stats.FailedItems, result.track.Title)
+		}
+	}
+}
+
+// prefetchTrackMetadata pre-fetches MusicBrainz metadata for all tracks in parallel
+func (ds *DownloadService) prefetchTrackMetadata(ctx context.Context, tracks []shared.Track, album *shared.Album, maxWorkers int, debug bool) {
+	// Create channels for work distribution
+	trackJobs := make(chan shared.Track, len(tracks))
+	results := make(chan bool, len(tracks)) // Just to wait for completion
+	
+	// Start worker goroutines for metadata fetching
+	for i := 0; i < maxWorkers; i++ {
+		go func(workerID int) {
+			for track := range trackJobs {
+				if debug {
+					ds.logger.Info("Metadata Worker %d: Pre-fetching metadata for %s", workerID, track.Title)
+				}
+				
+				// Pre-fetch metadata by calling the same functions that would be called during metadata addition
+				// This will populate the caches so that actual metadata addition is faster
+				if track.ISRC != "" {
+					// Try ISRC-based metadata lookup to populate cache
+					expectedTrackCount := len(tracks)
+					if album != nil && album.TotalTracks > 0 {
+						expectedTrackCount = album.TotalTracks
+					}
+					
+					_, err := downloader.GetISRCMetadataWithTrackCount(track.ISRC, expectedTrackCount)
+					if err != nil && debug {
+						ds.logger.Debug("Metadata Worker %d: ISRC lookup failed for %s: %v", workerID, track.Title, err)
+					}
+				}
+				
+				results <- true
+			}
+		}(i)
+	}
+	
+	// Send all tracks to the job queue
+	for _, track := range tracks {
+		trackJobs <- track
+	}
+	close(trackJobs)
+	
+	// Wait for all metadata fetching to complete
+	for i := 0; i < len(tracks); i++ {
+		<-results
+	}
+	
+	if debug {
+		ds.logger.Info("Metadata pre-fetching completed for %d tracks", len(tracks))
+	}
+}
+
+// prefetchAlbumMetadata pre-fetches album-level MusicBrainz metadata to populate cache
+func (ds *DownloadService) prefetchAlbumMetadata(ctx context.Context, album *shared.Album, debug bool) {
+	if album == nil {
+		return
+	}
+	
+	if debug {
+		ds.logger.Info("Pre-fetching album metadata for: %s by %s", album.Title, album.Artist)
+	}
+	
+	// The FindReleaseIDFromISRC call earlier should have already populated
+	// the release ID cache if any tracks had ISRC codes.
+	// Additional album-level metadata will be cached during the first track's
+	// metadata processing, so no additional work needed here.
+	
+	if debug {
+		ds.logger.Debug("Album metadata will be cached during track processing")
+	}
 }
 
 func (ds *DownloadService) DownloadTrack(ctx context.Context, trackID string, cfg *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error) {
@@ -298,6 +514,25 @@ func (ds *DownloadService) DownloadTracks(ctx context.Context, tracks []shared.T
 		downloader.FindReleaseIDFromISRC(tracks, album.Artist, album.Title)
 	}
 	
+	// Pre-fetch metadata for all tracks in parallel (if parallelism > 1)
+	maxWorkers := 1
+	if cfg != nil && cfg.Parallelism > 1 {
+		maxWorkers = cfg.Parallelism
+		if maxWorkers > 10 {
+			maxWorkers = 10
+		}
+		
+		if debug {
+			ds.logger.Info("Pre-fetching metadata for %d tracks using %d workers", len(tracks), maxWorkers)
+		}
+		
+		// Pre-fetch album-level metadata first (this is shared across all tracks)
+		ds.prefetchAlbumMetadata(ctx, album, debug)
+		
+		// Then pre-fetch track-specific metadata in parallel
+		ds.prefetchTrackMetadata(ctx, tracks, album, maxWorkers, debug)
+	}
+	
 	// Download cover art
 	var coverData []byte
 	if album.Cover != "" {
@@ -308,29 +543,49 @@ func (ds *DownloadService) DownloadTracks(ctx context.Context, tracks []shared.T
 		}
 	}
 	
-	// Download each track
-	for _, track := range tracks {
-		// Use the new method that supports naming masks
-		outputPath := ds.fileSystem.(*FileSystemService).GetDownloadPathWithTrack(track, album, format, cfg)
-		
-		// Check if file already exists
-		if ds.fileSystem.FileExists(outputPath) {
-			ds.logger.Info("Skipping %s - already exists", track.Title)
-			stats.SkippedCount++
-			continue
+	// Use parallelism from config for track downloads, default to 1 if not set
+	trackWorkers := 1
+	if cfg != nil && cfg.Parallelism > 0 {
+		trackWorkers = cfg.Parallelism
+		// Cap at reasonable maximum to avoid overwhelming the server
+		if trackWorkers > 10 {
+			trackWorkers = 10
 		}
-		
-		// Download the track
-		_, err := downloader.DownloadTrack(ctx, ds.apiClient.(*dab.DabAPI), track, album, outputPath, coverData, nil, debug, format, bitrate, cfg, ds.warningCollector.(*shared.WarningCollector))
-		if err != nil {
-			ds.logger.Error("Failed to download %s: %v", track.Title, err)
-			stats.FailedCount++
-			stats.FailedItems = append(stats.FailedItems, track.Title)
-			continue
+	}
+	
+	if debug && len(tracks) > 1 {
+		ds.logger.Info("Using parallelism setting: %d workers for %d tracks in album '%s'", trackWorkers, len(tracks), album.Title)
+	}
+	
+	// If only one track or parallelism is 1, download sequentially
+	if len(tracks) == 1 || trackWorkers == 1 {
+		// Download each track sequentially
+		for _, track := range tracks {
+			// Use the new method that supports naming masks
+			outputPath := ds.fileSystem.(*FileSystemService).GetDownloadPathWithTrack(track, album, format, cfg)
+			
+			// Check if file already exists
+			if ds.fileSystem.FileExists(outputPath) {
+				ds.logger.Info("Skipping %s - already exists", track.Title)
+				stats.SkippedCount++
+				continue
+			}
+			
+			// Download the track
+			_, err := downloader.DownloadTrack(ctx, ds.apiClient.(*dab.DabAPI), track, album, outputPath, coverData, nil, debug, format, bitrate, cfg, ds.warningCollector.(*shared.WarningCollector))
+			if err != nil {
+				ds.logger.Error("Failed to download %s: %v", track.Title, err)
+				stats.FailedCount++
+				stats.FailedItems = append(stats.FailedItems, track.Title)
+				continue
+			}
+			
+			stats.SuccessCount++
+			// Success message is logged by the calling command
 		}
-		
-		stats.SuccessCount++
-		// Success message is logged by the calling command
+	} else {
+		// Download tracks in parallel
+		ds.downloadTracksParallel(ctx, tracks, album, coverData, cfg, debug, format, bitrate, trackWorkers, stats)
 	}
 	
 	// Note: Warnings are collected but not displayed here

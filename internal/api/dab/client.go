@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,20 +14,22 @@ import (
 	"time"
 
 	"golang.org/x/sync/semaphore"
+	"golang.org/x/time/rate"
 
 	"dab-downloader/internal/config"
 	"dab-downloader/internal/shared"
 )
 
-const requestInterval = 500 * time.Millisecond // Define rate limit interval
-
 // NewDabAPI creates a new API client
 func NewDabAPI(endpoint, outputLocation string, client *http.Client) *DabAPI {
+	// Create a conservative rate limiter: 4 req/sec with burst of 8
+	limiter := rate.NewLimiter(rate.Every(250*time.Millisecond), 8)
+	
 	return &DabAPI{
 		endpoint:       strings.TrimSuffix(endpoint, "/"),
 		outputLocation: outputLocation,
 		client:         client,
-		rateLimiter:    time.NewTicker(requestInterval), // Initialize rate limiter
+		rateLimiter:    limiter,
 	}
 }
 
@@ -34,15 +37,17 @@ type DabAPI struct {
 	endpoint       string
 	outputLocation string
 	client         *http.Client
-	mu             sync.Mutex // Mutex to protect rate limiter
-	rateLimiter    *time.Ticker // Rate limiter for API requests
+	rateLimiter    *rate.Limiter // Rate limiter for API requests
+	rateLimitHits  int           // Counter for consecutive rate limit hits
+	mu             sync.Mutex    // Mutex to protect rate limit adjustments
 }
 
-// Request makes HTTP requests to the API
+// Request makes HTTP requests to the API with specialized 429 retry handling
 func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, params []shared.QueryParam) (*http.Response, error) {
-	api.mu.Lock()
-	<-api.rateLimiter.C // Wait for the rate limiter
-	api.mu.Unlock()
+	// Wait for rate limiter permission - this allows bursts while maintaining overall rate limits
+	if err := api.rateLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limiter wait failed: %w", err)
+	}
 
 	var fullURL string
 
@@ -65,35 +70,143 @@ func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, pa
 		u.RawQuery = q.Encode()
 	}
 
-	var resp *http.Response
-	err = shared.RetryWithBackoff(shared.DefaultMaxRetries, 1, func() error {
-		req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	// Use specialized 429 retry logic
+	return api.requestWithRateLimitRetry(ctx, u.String())
+}
+
+// fibonacciDelay calculates delay using Fibonacci sequence: 1, 1, 2, 3, 5, 8, 13...
+func fibonacciDelay(attempt int, baseDelay time.Duration) time.Duration {
+	if attempt <= 0 {
+		return baseDelay
+	}
+	
+	// Fibonacci sequence: F(0)=1, F(1)=1, F(n)=F(n-1)+F(n-2)
+	fib := []int{1, 2, 3, 5, 8, 13, 21, 34}
+	
+	if attempt >= len(fib) {
+		// For attempts beyond our precomputed sequence, use the last value
+		attempt = len(fib) - 1
+	}
+	
+	return baseDelay * time.Duration(fib[attempt])
+}
+
+// requestWithRateLimitRetry implements Fibonacci backoff specifically for 429 errors
+func (api *DabAPI) requestWithRateLimitRetry(ctx context.Context, url string) (*http.Response, error) {
+	const maxRetries = 5
+	const baseDelay = 1 * time.Second
+	const maxDelay = 30 * time.Second
+	
+	var lastResp *http.Response
+	var lastErr error
+	var consecutiveRateLimits int
+	
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
-			return fmt.Errorf("error creating request: %w", err)
+			return nil, fmt.Errorf("error creating request: %w", err)
 		}
 		req.Header.Set("User-Agent", shared.UserAgent)
 
-		resp, err = api.client.Do(req)
+		resp, err := api.client.Do(req)
 		if err != nil {
-			return fmt.Errorf("error executing request: %w", err)
+			lastErr = fmt.Errorf("error executing request: %w", err)
+			// For network errors, use Fibonacci retry logic
+			if attempt < maxRetries-1 {
+				delay := fibonacciDelay(attempt, baseDelay)
+				if delay > maxDelay {
+					delay = maxDelay
+				}
+				time.Sleep(delay)
+				continue
+			}
+			return nil, lastErr
 		}
 
+		// Handle successful responses
+		if resp.StatusCode == http.StatusOK {
+			// Reset consecutive rate limit counter on success
+			consecutiveRateLimits = 0
+			api.mu.Lock()
+			api.rateLimitHits = 0 // Reset global counter on success
+			api.mu.Unlock()
+			return resp, nil
+		}
+
+		// Handle 429 rate limit errors with incremental backoff
 		if resp.StatusCode == http.StatusTooManyRequests {
 			resp.Body.Close()
-			return fmt.Errorf("rate limit exceeded (429), retrying") // Return error to trigger retry
-		}
-		if resp.StatusCode != http.StatusOK {
+			lastResp = resp
+			consecutiveRateLimits++
+			
+			// Track global rate limit hits
+			api.mu.Lock()
+			api.rateLimitHits++
+			shouldAdjust := api.rateLimitHits > 10 // Adjust after 10 consecutive hits
+			api.mu.Unlock()
+			
+			// Automatically adjust rate limiter if we're hitting limits too often
+			if shouldAdjust && attempt == 0 { // Only adjust on first attempt to avoid multiple adjustments
+				api.AdjustRateLimitForOverload()
+			}
+			
+			if attempt < maxRetries-1 {
+				// Fibonacci backoff for 429 errors: 1s, 1s, 2s, 3s, 5s (capped at 30s)
+				delay := fibonacciDelay(attempt, baseDelay)
+				if delay > maxDelay {
+					delay = maxDelay
+				}
+				
+				// Add extra delay if we're hitting rate limits repeatedly
+				if consecutiveRateLimits > 2 {
+					delay = delay * time.Duration(consecutiveRateLimits)
+					if delay > maxDelay {
+						delay = maxDelay
+					}
+				}
+				
+				// Add some jitter to avoid thundering herd
+				jitter := time.Duration(rand.Int63n(int64(delay/4)))
+				finalDelay := delay + jitter
+				
+				// Log the retry attempt (visible to user for transparency)
+				shared.ColorWarning.Printf("⚠️ Rate limit hit (429), retrying in %v (attempt %d/%d)\n", 
+					finalDelay, attempt+1, maxRetries)
+				
+				// Wait before retrying
+				select {
+				case <-time.After(finalDelay):
+					continue
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+		} else {
+			// Handle other HTTP errors (don't retry)
 			resp.Body.Close()
-			return fmt.Errorf("request failed with status: %s", resp.Status)
+			return nil, fmt.Errorf("request failed with status: %s", resp.Status)
 		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
 	}
+	
+	// All retries exhausted
+	if lastResp != nil && lastResp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("rate limit exceeded (429) after %d attempts, server is overloaded - try reducing parallelism", maxRetries)
+	}
+	
+	return nil, fmt.Errorf("request failed after %d attempts: %w", maxRetries, lastErr)
+}
 
-	return resp, nil
+// AdjustRateLimitForOverload reduces the rate limit when server is consistently overloaded
+func (api *DabAPI) AdjustRateLimitForOverload() {
+	// Reduce rate limit to be more conservative: 2 req/sec with burst of 4
+	api.rateLimiter = rate.NewLimiter(rate.Every(500*time.Millisecond), 4)
+	shared.ColorWarning.Println("⚠️ Adjusted rate limit to be more conservative due to server overload")
+}
+
+// ResetRateLimit resets the rate limit to default values
+func (api *DabAPI) ResetRateLimit() {
+	// Reset to default: 4 req/sec with burst of 8
+	api.rateLimiter = rate.NewLimiter(rate.Every(250*time.Millisecond), 8)
 }
 
 // GetAlbum retrieves album information
@@ -222,14 +335,28 @@ func (api *DabAPI) GetArtist(ctx context.Context, artistID string, config *confi
 	// Process albums to ensure proper categorization
 	shared.ColorInfo.Println("🔍 Fetching detailed album information...")
 
+	// Determine parallelism for album detail fetching
+	parallelism := 5 // Conservative default parallelism
+	if config != nil && config.Parallelism > 0 {
+		parallelism = config.Parallelism // Use configured parallelism
+		// Cap at reasonable maximum
+		if parallelism > 10 {
+			parallelism = 10
+		}
+	}
+	
+	if debug {
+		fmt.Printf("DEBUG - Using parallelism: %d workers for fetching %d album details\n", parallelism, len(artist.Albums))
+	}
+
 	var wg sync.WaitGroup
-	sem := semaphore.NewWeighted(int64(config.Parallelism)) // Use configured parallelism for fetching
+	sem := semaphore.NewWeighted(int64(parallelism)) // Use validated parallelism for fetching
 
 	for i := range artist.Albums {
 		wg.Add(1)
 		album := &artist.Albums[i] // Capture album for goroutine
 
-		go func(album *shared.Album) {
+		go func(album *shared.Album, workerID int) {
 			defer wg.Done()
 			if err := sem.Acquire(ctx, 1); err != nil {
 				shared.ColorError.Printf("Failed to acquire semaphore for album %s: %v\n", album.Title, err)
@@ -239,9 +366,10 @@ func (api *DabAPI) GetArtist(ctx context.Context, artistID string, config *confi
 
 			// If album type is not provided by the discography endpoint, fetch full album details
 			if album.Type == "" || len(album.Tracks) == 0 {
-				shared.ColorInfo.Printf("  Fetching details for album: %s (ID: %s)\n", album.Title, album.ID)
 				if debug {
-					fmt.Printf("DEBUG - Fetching full album details for album ID: %s, Title: %s\n", album.ID, album.Title)
+					fmt.Printf("DEBUG - Worker %d: Fetching full album details for album ID: %s, Title: %s\n", workerID, album.ID, album.Title)
+				} else {
+					shared.ColorInfo.Printf("  Fetching details for album: %s (ID: %s)\n", album.Title, album.ID)
 				}
 				fullAlbum, err := api.GetAlbum(ctx, album.ID)
 				if err != nil {
@@ -280,9 +408,13 @@ func (api *DabAPI) GetArtist(ctx context.Context, artistID string, config *confi
 			if album.Year == "" && len(album.ReleaseDate) >= 4 {
 				album.Year = album.ReleaseDate[:4]
 			}
-		}(album)
+		}(album, i)
 	}
 	wg.Wait()
+	
+	if debug {
+		fmt.Printf("DEBUG - Completed parallel fetching of %d album details\n", len(artist.Albums))
+	}
 
 	return &artist, nil
 }

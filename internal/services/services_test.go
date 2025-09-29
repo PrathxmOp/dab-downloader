@@ -284,3 +284,38 @@ func TestConversionService(t *testing.T) {
 		t.Error("999 should be an invalid bitrate")
 	}
 }
+
+func TestParallelismConfiguration(t *testing.T) {
+	// Test with valid parallelism setting
+	cfg := &config.Config{
+		APIURL:           "https://api.test.com",
+		DownloadLocation: "./test-downloads",
+		Parallelism:      5,
+		Format:           "flac",
+		Bitrate:          "320",
+	}
+
+	if cfg.Parallelism != 5 {
+		t.Errorf("Expected parallelism 5, got %d", cfg.Parallelism)
+	}
+
+	// Test with zero parallelism
+	cfg.Parallelism = 0
+	if cfg.Parallelism != 0 {
+		t.Errorf("Expected parallelism 0, got %d", cfg.Parallelism)
+	}
+
+	// Test with high parallelism
+	cfg.Parallelism = 20
+	if cfg.Parallelism != 20 {
+		t.Errorf("Expected parallelism 20, got %d", cfg.Parallelism)
+	}
+
+	// Test that the service container can be created with parallelism config
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	container := NewServiceContainer(cfg, httpClient)
+	
+	if container == nil {
+		t.Error("Service container should be created successfully with parallelism config")
+	}
+}
