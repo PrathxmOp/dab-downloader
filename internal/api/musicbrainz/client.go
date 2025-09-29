@@ -216,7 +216,8 @@ func (mb *MusicBrainzClient) GetReleaseMetadata(mbid string) (*MusicBrainzReleas
 // SearchTrackByISRC searches for a track on MusicBrainz using ISRC
 func (mb *MusicBrainzClient) SearchTrackByISRC(isrc string) (*MusicBrainzTrack, error) {
 	query := fmt.Sprintf("isrc:\"%s\"", isrc)
-	path := fmt.Sprintf("recording?query=%s&limit=1", url.QueryEscape(query))
+	// Include comprehensive metadata to get track counts for release matching
+	path := fmt.Sprintf("recording?query=%s&inc=artists+releases+release-groups+recordings&limit=1", url.QueryEscape(query))
 	body, err := mb.getWithRetry(path)
 	if err != nil {
 		return nil, err
@@ -296,6 +297,15 @@ type MusicBrainzTrack struct {
 		ID    string `json:"id"`
 		Title string `json:"title"`
 		Date  string `json:"date"`
+		ArtistCredit []struct {
+			Artist struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			} `json:"artist"`
+		} `json:"artist-credit"`
+		ReleaseGroup struct {
+			ID string `json:"id"`
+		} `json:"release-group"`
 		Media []struct {
 			Format string `json:"format"`
 			Discs  []struct {

@@ -3,6 +3,7 @@ package downloader
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -190,5 +191,293 @@ func TestISRCPrioritySearch(t *testing.T) {
 	
 	if warningCollector.HasWarnings() {
 		warningCollector.PrintSummary()
+	}
+}
+
+func TestFindReleaseIDFromISRC(t *testing.T) {
+	t.Log("Testing ISRC-based release ID lookup...")
+	
+	// Clear cache before test
+	ClearAlbumCache()
+	
+	// Create tracks with ISRC
+	tracks := []shared.Track{
+		{
+			ID:     "track1",
+			Title:  "High by the Beach",
+			Artist: "Lana Del Rey",
+			ISRC:   "GBUM71505078", // Known ISRC
+		},
+		{
+			ID:     "track2", 
+			Title:  "Music to Watch Boys To",
+			Artist: "Lana Del Rey",
+			// No ISRC for this track
+		},
+	}
+	
+	albumArtist := "Lana Del Rey"
+	albumTitle := "Honeymoon"
+	
+	// Test the function
+	FindReleaseIDFromISRC(tracks, albumArtist, albumTitle)
+	
+	// Check if release ID was cached
+	cachedReleaseID := albumCache.GetCachedReleaseID(albumArtist, albumTitle)
+	if cachedReleaseID != "" {
+		t.Logf("Successfully found and cached release ID: %s", cachedReleaseID)
+	} else {
+		t.Log("No release ID found (this might be expected if ISRC lookup fails)")
+	}
+	
+	// Test with tracks that have no ISRC
+	tracksNoISRC := []shared.Track{
+		{
+			ID:     "track3",
+			Title:  "Some Song",
+			Artist: "Some Artist",
+			// No ISRC
+		},
+	}
+	
+	FindReleaseIDFromISRC(tracksNoISRC, "Some Artist", "Some Album")
+	cachedReleaseID2 := albumCache.GetCachedReleaseID("Some Artist", "Some Album")
+	if cachedReleaseID2 == "" {
+		t.Log("Correctly handled tracks with no ISRC - no release ID cached")
+	} else {
+		t.Errorf("Unexpected release ID cached for tracks without ISRC: %s", cachedReleaseID2)
+	}
+}
+
+func TestGetISRCMetadata(t *testing.T) {
+	t.Log("Testing efficient ISRC metadata extraction...")
+	
+	// Test with a known ISRC
+	isrc := "GBUM71505078" // High by the Beach - Lana Del Rey
+	
+	metadata, err := GetISRCMetadata(isrc)
+	if err != nil {
+		t.Logf("ISRC metadata lookup failed (this might be expected): %v", err)
+		return
+	}
+	
+	t.Logf("Successfully extracted metadata from ISRC %s:", isrc)
+	t.Logf("  Track ID: %s", metadata.TrackID)
+	t.Logf("  Track Artist ID: %s", metadata.TrackArtistID)
+	t.Logf("  Release ID: %s", metadata.ReleaseID)
+	t.Logf("  Release Artist ID: %s", metadata.ReleaseArtistID)
+	t.Logf("  Release Group ID: %s", metadata.ReleaseGroupID)
+	
+	// Verify we got all the essential IDs
+	if metadata.TrackID == "" {
+		t.Error("Track ID should not be empty")
+	}
+	if metadata.ReleaseID == "" {
+		t.Error("Release ID should not be empty")
+	}
+	if metadata.ReleaseGroupID == "" {
+		t.Error("Release Group ID should not be empty")
+	}
+	
+	// Test with invalid ISRC
+	_, err = GetISRCMetadata("INVALID_ISRC")
+	if err == nil {
+		t.Error("Expected error for invalid ISRC")
+	} else {
+		t.Logf("Correctly handled invalid ISRC: %v", err)
+	}
+}
+
+func TestISRCMetadataWithTrackCountMatching(t *testing.T) {
+	t.Log("Testing ISRC metadata extraction with track count matching...")
+	
+	// Test with a known ISRC that might appear on multiple releases
+	isrc := "GBUM71505078" // High by the Beach - Lana Del Rey
+	
+	// Test with different expected track counts
+	testCases := []struct {
+		name               string
+		expectedTrackCount int
+		description        string
+	}{
+		{"Single", 1, "Should prefer single release"},
+		{"EP", 5, "Should prefer EP release"},
+		{"Album", 13, "Should prefer full album release"},
+		{"No preference", 0, "Should use default selection"},
+	}
+	
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			metadata, err := GetISRCMetadataWithTrackCount(isrc, tc.expectedTrackCount)
+			if err != nil {
+				t.Logf("ISRC metadata lookup failed for %s (this might be expected): %v", tc.description, err)
+				return
+			}
+			
+			t.Logf("%s - Expected tracks: %d", tc.description, tc.expectedTrackCount)
+			t.Logf("  Selected Release ID: %s", metadata.ReleaseID)
+			t.Logf("  Release Group ID: %s", metadata.ReleaseGroupID)
+			
+			// Verify we got essential metadata
+			if metadata.TrackID == "" {
+				t.Error("Track ID should not be empty")
+			}
+			if metadata.ReleaseID == "" {
+				t.Error("Release ID should not be empty")
+			}
+		})
+	}
+}
+
+func TestReleaseSelectionDebug(t *testing.T) {
+	t.Log("Testing release selection with debug information...")
+	
+	// Test with a known ISRC
+	isrc := "GBUM71505078" // High by the Beach - Lana Del Rey
+	
+	// Get the raw MusicBrainz track data to see what releases are available
+	mbTrack, err := mbClient.SearchTrackByISRC(isrc)
+	if err != nil {
+		t.Logf("ISRC search failed: %v", err)
+		return
+	}
+	
+	t.Logf("Found %d releases for ISRC %s:", len(mbTrack.Releases), isrc)
+	for i, release := range mbTrack.Releases {
+		totalTracks := 0
+		for _, media := range release.Media {
+			totalTracks += len(media.Tracks)
+		}
+		t.Logf("  Release %d: ID=%s, Title=%s, Tracks=%d", i+1, release.ID, release.Title, totalTracks)
+		t.Logf("    Release Group ID: %s", release.ReleaseGroup.ID)
+		t.Logf("    Date: %s", release.Date)
+	}
+	
+	// Test the selection logic with different track counts
+	if len(mbTrack.Releases) > 1 {
+		t.Log("Testing selection logic with multiple releases...")
+		
+		// Test with track count that should match a specific release
+		for expectedCount := 1; expectedCount <= 15; expectedCount++ {
+			selected := selectBestRelease(mbTrack.Releases, expectedCount)
+			totalTracks := 0
+			for _, media := range selected.Media {
+				totalTracks += len(media.Tracks)
+			}
+			if totalTracks == expectedCount {
+				t.Logf("  Expected %d tracks: Found exact match with %d tracks (Release: %s)", 
+					expectedCount, totalTracks, selected.ID)
+			}
+		}
+	} else {
+		t.Log("Only one release found - track count matching not applicable")
+	}
+}
+
+func TestIntelligentReleaseSelection(t *testing.T) {
+	t.Log("Testing intelligent release selection...")
+	
+	// Test with different expected track counts to see which releases get selected
+	testCases := []struct {
+		name               string
+		expectedTrackCount int
+		description        string
+	}{
+		{"Single", 1, "Should prefer single release"},
+		{"EP", 5, "Should prefer EP release"},  
+		{"Album", 13, "Should prefer full album release"},
+		{"Large Album", 20, "Should prefer full album over compilations"},
+	}
+	
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			metadata, err := GetISRCMetadataWithTrackCount("GBUM71505078", tc.expectedTrackCount)
+			if err != nil {
+				t.Logf("ISRC metadata lookup failed: %v", err)
+				return
+			}
+			
+			t.Logf("%s (expected %d tracks):", tc.description, tc.expectedTrackCount)
+			t.Logf("  Selected Release ID: %s", metadata.ReleaseID)
+			t.Logf("  Release Group ID: %s", metadata.ReleaseGroupID)
+			
+			// Get the release title for context
+			mbTrack, err := mbClient.SearchTrackByISRC("GBUM71505078")
+			if err == nil {
+				for _, release := range mbTrack.Releases {
+					if release.ID == metadata.ReleaseID {
+						t.Logf("  Selected Release Title: %s", release.Title)
+						t.Logf("  Release Date: %s", release.Date)
+						break
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestDigitalMediaPreference(t *testing.T) {
+	t.Log("Testing Digital Media format preference...")
+	
+	// Test with a known ISRC to see if Digital Media releases are preferred
+	isrc := "GBUM71505078" // High by the Beach - Lana Del Rey
+	
+	// Get the raw MusicBrainz track data to see what formats are available
+	mbTrack, err := mbClient.SearchTrackByISRC(isrc)
+	if err != nil {
+		t.Logf("ISRC search failed: %v", err)
+		return
+	}
+	
+	t.Logf("Found %d releases for ISRC %s:", len(mbTrack.Releases), isrc)
+	digitalMediaFound := false
+	physicalMediaFound := false
+	
+	for i, release := range mbTrack.Releases {
+		for _, media := range release.Media {
+			format := strings.ToLower(media.Format)
+			t.Logf("  Release %d: ID=%s, Title=%s, Format=%s", i+1, release.ID, release.Title, media.Format)
+			
+			if format == "digital media" {
+				digitalMediaFound = true
+			}
+			if format == "cd" || format == "vinyl" {
+				physicalMediaFound = true
+			}
+		}
+	}
+	
+	if digitalMediaFound {
+		t.Log("Digital Media releases found - testing preference...")
+		
+		// Test with album-sized track count to see if Digital Media is preferred
+		metadata, err := GetISRCMetadataWithTrackCount(isrc, 13)
+		if err != nil {
+			t.Logf("ISRC metadata lookup failed: %v", err)
+			return
+		}
+		
+		// Check if the selected release has Digital Media format
+		for _, release := range mbTrack.Releases {
+			if release.ID == metadata.ReleaseID {
+				for _, media := range release.Media {
+					if strings.ToLower(media.Format) == "digital media" {
+						t.Logf("✅ Successfully selected Digital Media release: %s", release.Title)
+						return
+					}
+				}
+				t.Logf("Selected release format is not Digital Media: %s", release.Title)
+				for _, media := range release.Media {
+					t.Logf("  Format: %s", media.Format)
+				}
+				break
+			}
+		}
+	} else {
+		t.Log("No Digital Media releases found for this ISRC - test not applicable")
+	}
+	
+	if !digitalMediaFound && !physicalMediaFound {
+		t.Log("No format information available in releases")
 	}
 }

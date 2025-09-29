@@ -293,6 +293,11 @@ func (ds *DownloadService) DownloadTrackDirect(ctx context.Context, track shared
 func (ds *DownloadService) DownloadTracks(ctx context.Context, tracks []shared.Track, album *shared.Album, cfg *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error) {
 	stats := &shared.DownloadStats{}
 	
+	// Pre-populate MusicBrainz release ID from ISRC if available
+	if album != nil && len(tracks) > 0 {
+		downloader.FindReleaseIDFromISRC(tracks, album.Artist, album.Title)
+	}
+	
 	// Download cover art
 	var coverData []byte
 	if album.Cover != "" {

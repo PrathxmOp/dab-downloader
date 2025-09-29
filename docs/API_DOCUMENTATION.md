@@ -209,6 +209,15 @@ const (
 
 ### Search Operations
 
+#### `SearchTrackByISRC(isrc string) (*MusicBrainzTrack, error)`
+
+Searches for track metadata using ISRC (International Standard Recording Code):
+- More accurate than text-based searches
+- Returns complete track information including associated releases
+- Used for enhanced album-level metadata consistency
+
+**Query Format**: `isrc:"ISRC_CODE"`
+
 #### `SearchTrack(artist, album, title string) (*MusicBrainzTrack, error)`
 
 Searches for track metadata:
@@ -226,6 +235,17 @@ Searches for release (album) metadata:
 - Label and catalog number data
 
 **Query Format**: `artist:"Artist" AND release:"Album"`
+
+### Enhanced Release Lookup Strategy
+
+The system now implements an intelligent release lookup strategy:
+
+1. **ISRC Priority**: When processing albums, the system first attempts to find tracks with ISRC codes
+2. **Release ID Extraction**: Uses ISRC-based track lookup to extract the MusicBrainz release ID
+3. **Album-wide Application**: Applies the discovered release ID to all tracks in the album
+4. **Fallback Mechanism**: Falls back to traditional artist/album name searches when ISRC is unavailable
+
+This approach ensures consistent and accurate metadata across all tracks in an album.
 
 ### Data Structures
 

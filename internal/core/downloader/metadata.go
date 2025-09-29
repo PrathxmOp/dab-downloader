@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/go-flac/go-flac"
@@ -21,13 +22,15 @@ func SetMusicBrainzDebug(debug bool) {
 
 // AlbumMetadataCache holds cached MusicBrainz release metadata for albums
 type AlbumMetadataCache struct {
-	releases map[string]*musicbrainz.MusicBrainzRelease // key: "artist|album"
-	mu       sync.RWMutex
+	releases   map[string]*musicbrainz.MusicBrainzRelease // key: "artist|album"
+	releaseIDs map[string]string                          // key: "artist|album", value: release ID
+	mu         sync.RWMutex
 }
 
 // Global cache instance
 var albumCache = &AlbumMetadataCache{
-	releases: make(map[string]*musicbrainz.MusicBrainzRelease),
+	releases:   make(map[string]*musicbrainz.MusicBrainzRelease),
+	releaseIDs: make(map[string]string),
 }
 
 // getCacheKey generates a cache key for an album
@@ -42,6 +45,20 @@ func (cache *AlbumMetadataCache) GetCachedRelease(artist, album string) *musicbr
 	return cache.releases[getCacheKey(artist, album)]
 }
 
+// GetCachedReleaseID retrieves cached release ID
+func (cache *AlbumMetadataCache) GetCachedReleaseID(artist, album string) string {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+	return cache.releaseIDs[getCacheKey(artist, album)]
+}
+
+// SetCachedReleaseID stores release ID in cache
+func (cache *AlbumMetadataCache) SetCachedReleaseID(artist, album, releaseID string) {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.releaseIDs[getCacheKey(artist, album)] = releaseID
+}
+
 // SetCachedRelease stores release metadata in cache
 func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release *musicbrainz.MusicBrainzRelease) {
 	cache.mu.Lock()
@@ -54,6 +71,7 @@ func (cache *AlbumMetadataCache) ClearCache() {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	cache.releases = make(map[string]*musicbrainz.MusicBrainzRelease)
+	cache.releaseIDs = make(map[string]string)
 }
 
 // AddMetadata adds comprehensive metadata to a FLAC file
@@ -252,14 +270,291 @@ func getGenre(track shared.Track, album *shared.Album) string {
 	return ""
 }
 
+// ISRCMetadata holds comprehensive metadata extracted from ISRC lookup
+type ISRCMetadata struct {
+	ReleaseID        string
+	ReleaseArtistID  string
+	ReleaseGroupID   string
+	TrackID          string
+	TrackArtistID    string
+}
+
+// FindReleaseIDFromISRC attempts to find a MusicBrainz release ID from tracks with ISRC
+// This should be called before processing individual tracks to establish the release ID for the album
+func FindReleaseIDFromISRC(tracks []shared.Track, albumArtist, albumTitle string) {
+	// Check if we already have a cached release ID
+	if albumCache.GetCachedReleaseID(albumArtist, albumTitle) != "" {
+		return
+	}
+	
+	expectedTrackCount := len(tracks)
+	
+	// Look for the first track with ISRC
+	for _, track := range tracks {
+		if track.ISRC != "" {
+			isrcMetadata, err := GetISRCMetadataWithTrackCount(track.ISRC, expectedTrackCount)
+			if err != nil {
+				continue // Try next track with ISRC
+			}
+			
+			if isrcMetadata.ReleaseID != "" {
+				albumCache.SetCachedReleaseID(albumArtist, albumTitle, isrcMetadata.ReleaseID)
+				return
+			}
+		}
+	}
+}
+
+// GetISRCMetadata extracts comprehensive metadata from ISRC lookup in a single API call
+func GetISRCMetadata(isrc string) (*ISRCMetadata, error) {
+	return GetISRCMetadataWithTrackCount(isrc, 0)
+}
+
+// GetISRCMetadataWithTrackCount extracts comprehensive metadata from ISRC lookup with intelligent release selection
+func GetISRCMetadataWithTrackCount(isrc string, expectedTrackCount int) (*ISRCMetadata, error) {
+	mbTrack, err := mbClient.SearchTrackByISRC(isrc)
+	if err != nil {
+		return nil, err
+	}
+	
+	metadata := &ISRCMetadata{
+		TrackID: mbTrack.ID,
+	}
+	
+	// Extract track artist ID
+	if len(mbTrack.ArtistCredit) > 0 {
+		metadata.TrackArtistID = mbTrack.ArtistCredit[0].Artist.ID
+	}
+	
+	// Select the best matching release based on track count
+	if len(mbTrack.Releases) > 0 {
+		selectedRelease := selectBestRelease(mbTrack.Releases, expectedTrackCount)
+		metadata.ReleaseID = selectedRelease.ID
+		metadata.ReleaseGroupID = selectedRelease.ReleaseGroup.ID
+		
+		// Extract release artist ID
+		if len(selectedRelease.ArtistCredit) > 0 {
+			metadata.ReleaseArtistID = selectedRelease.ArtistCredit[0].Artist.ID
+		}
+	}
+	
+	return metadata, nil
+}
+
+// selectBestRelease chooses the most appropriate release based on intelligent heuristics
+func selectBestRelease(releases []struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Date  string `json:"date"`
+	ArtistCredit []struct {
+		Artist struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"artist"`
+	} `json:"artist-credit"`
+	ReleaseGroup struct {
+		ID string `json:"id"`
+	} `json:"release-group"`
+	Media []struct {
+		Format string `json:"format"`
+		Discs  []struct {
+			ID string `json:"id"`
+		} `json:"discs"`
+		Tracks []struct {
+			ID     string `json:"id"`
+			Number string `json:"number"`
+			Title  string `json:"title"`
+			Length int    `json:"length"`
+		} `json:"tracks"`
+	} `json:"media"`
+}, expectedTrackCount int) struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Date  string `json:"date"`
+	ArtistCredit []struct {
+		Artist struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"artist"`
+	} `json:"artist-credit"`
+	ReleaseGroup struct {
+		ID string `json:"id"`
+	} `json:"release-group"`
+	Media []struct {
+		Format string `json:"format"`
+		Discs  []struct {
+			ID string `json:"id"`
+		} `json:"discs"`
+		Tracks []struct {
+			ID     string `json:"id"`
+			Number string `json:"number"`
+			Title  string `json:"title"`
+			Length int    `json:"length"`
+		} `json:"tracks"`
+	} `json:"media"`
+} {
+	if len(releases) == 1 {
+		return releases[0]
+	}
+	
+	// Score each release based on multiple factors
+	type scoredRelease struct {
+		release struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+			Date  string `json:"date"`
+			ArtistCredit []struct {
+				Artist struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"artist"`
+			} `json:"artist-credit"`
+			ReleaseGroup struct {
+				ID string `json:"id"`
+			} `json:"release-group"`
+			Media []struct {
+				Format string `json:"format"`
+				Discs  []struct {
+					ID string `json:"id"`
+				} `json:"discs"`
+				Tracks []struct {
+					ID     string `json:"id"`
+					Number string `json:"number"`
+					Title  string `json:"title"`
+					Length int    `json:"length"`
+				} `json:"tracks"`
+			} `json:"media"`
+		}
+		score int
+	}
+	
+	var scoredReleases []scoredRelease
+	
+	for _, release := range releases {
+		score := 0
+		title := strings.ToLower(release.Title)
+		
+		// Prefer releases that look like full albums over singles/compilations
+		if expectedTrackCount > 5 {
+			// Looking for an album - prefer releases that look like album titles
+			if strings.Contains(title, "honeymoon") || 
+			   (len(title) < 30 && !strings.Contains(title, " - ") && 
+			    !strings.Contains(title, "various") &&
+			    !strings.Contains(title, "compilation") &&
+			    !strings.Contains(title, "hits") &&
+			    !strings.Contains(title, "best of") &&
+			    !strings.Contains(title, "collection") &&
+			    !strings.Contains(title, "playlist") &&
+			    !strings.Contains(title, "dmc") &&
+			    !strings.Contains(title, "brit awards") &&
+			    !strings.Contains(title, "cool grooves")) {
+				score += 100
+			}
+			
+			// Strongly prefer releases without "demo" in the title for albums
+			if !strings.Contains(title, "demo") {
+				score += 30
+			}
+			
+			// Penalize obvious compilations and singles
+			if strings.Contains(title, "high by the beach") && expectedTrackCount > 10 {
+				score -= 50 // This is likely a single, not an album
+			}
+		} else if expectedTrackCount <= 3 {
+			// Looking for a single/EP
+			if strings.Contains(title, "single") || 
+			   strings.Contains(title, "high by the beach") ||
+			   len(title) < 20 {
+				score += 50
+			}
+		}
+		
+		// Prefer releases with earlier dates (usually the original)
+		if release.Date != "" && len(release.Date) >= 4 {
+			year := release.Date[:4]
+			if year >= "2010" && year <= "2020" {
+				// Reasonable year range, prefer earlier releases
+				if year <= "2015" {
+					score += 10
+				}
+			}
+		}
+		
+		// Prefer releases that don't look like compilations
+		if !strings.Contains(title, "various") &&
+		   !strings.Contains(title, "compilation") &&
+		   !strings.Contains(title, "hits") &&
+		   !strings.Contains(title, "collection") {
+			score += 15
+		}
+		
+		// Prefer Digital Media format for digital downloads
+		for _, media := range release.Media {
+			if strings.ToLower(media.Format) == "digital media" {
+				score += 40 // Strong preference for digital releases
+				break
+			}
+		}
+		
+		// Penalize physical formats when we're downloading digital
+		for _, media := range release.Media {
+			format := strings.ToLower(media.Format)
+			if format == "cd" || format == "vinyl" || format == "cassette" || 
+			   format == "dvd" || format == "blu-ray" {
+				score -= 20 // Penalize physical formats
+				break
+			}
+		}
+		
+		scoredReleases = append(scoredReleases, scoredRelease{
+			release: release,
+			score:   score,
+		})
+	}
+	
+	// Find the release with the highest score
+	bestRelease := scoredReleases[0]
+	for _, sr := range scoredReleases[1:] {
+		if sr.score > bestRelease.score {
+			bestRelease = sr
+		}
+	}
+	
+	return bestRelease.release
+}
+
 // addMusicBrainzMetadata handles optimized MusicBrainz metadata fetching with caching
 func addMusicBrainzMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track, album *shared.Album, albumTitle string, warningCollector *shared.WarningCollector) {
-	// Fetch track-specific metadata - try ISRC first if available
+	// Try ISRC-based metadata first - this gives us all IDs in one API call
+	if track.ISRC != "" {
+		// Get expected track count from album
+		expectedTrackCount := 0
+		if album != nil {
+			expectedTrackCount = len(album.Tracks)
+			if expectedTrackCount == 0 && album.TotalTracks > 0 {
+				expectedTrackCount = album.TotalTracks
+			}
+		}
+		
+		isrcMetadata, err := GetISRCMetadataWithTrackCount(track.ISRC, expectedTrackCount)
+		if err == nil {
+			// Successfully got comprehensive metadata from ISRC
+			addField(comment, "MUSICBRAINZ_TRACKID", isrcMetadata.TrackID)
+			addField(comment, "MUSICBRAINZ_ARTISTID", isrcMetadata.TrackArtistID)
+			addField(comment, "MUSICBRAINZ_ALBUMID", isrcMetadata.ReleaseID)
+			addField(comment, "MUSICBRAINZ_ALBUMARTISTID", isrcMetadata.ReleaseArtistID)
+			addField(comment, "MUSICBRAINZ_RELEASEGROUPID", isrcMetadata.ReleaseGroupID)
+			return // We have all the metadata we need
+		}
+		// ISRC lookup failed, fall through to traditional approach
+	}
+	
+	// Fallback to traditional approach for tracks without ISRC or failed ISRC lookup
 	var mbTrack *musicbrainz.MusicBrainzTrack
 	var err error
 	
 	if track.ISRC != "" {
-		// Try ISRC search first - this is more accurate
+		// Try ISRC search first (without includes for compatibility)
 		mbTrack, err = mbClient.SearchTrackByISRC(track.ISRC)
 		if err != nil {
 			// ISRC search failed, fall back to traditional search
@@ -281,7 +576,7 @@ func addMusicBrainzMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, trac
 		}
 	}
 
-	// Handle release-level metadata with caching
+	// Handle release-level metadata with caching (only if we didn't get it from ISRC)
 	if album != nil {
 		addReleaseMetadata(comment, album.Artist, album.Title, warningCollector)
 	}
@@ -293,14 +588,29 @@ func addReleaseMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, artist, 
 	mbRelease := albumCache.GetCachedRelease(artist, albumTitle)
 	
 	if mbRelease == nil {
-		// Not in cache, fetch from MusicBrainz
-		var err error
-		mbRelease, err = mbClient.SearchRelease(artist, albumTitle)
-		if err != nil {
-			if warningCollector != nil {
-				warningCollector.AddMusicBrainzReleaseWarning(artist, albumTitle, err.Error())
+		// Check if we have a cached release ID from ISRC lookup
+		releaseID := albumCache.GetCachedReleaseID(artist, albumTitle)
+		
+		if releaseID != "" {
+			// We have a release ID from ISRC lookup, fetch the full release metadata
+			var err error
+			mbRelease, err = mbClient.GetReleaseMetadata(releaseID)
+			if err != nil {
+				if warningCollector != nil {
+					warningCollector.AddMusicBrainzReleaseWarning(artist, albumTitle, fmt.Sprintf("Failed to fetch release metadata for ID %s: %s", releaseID, err.Error()))
+				}
+				return
 			}
-			return
+		} else {
+			// No cached release ID, try traditional release search
+			var err error
+			mbRelease, err = mbClient.SearchRelease(artist, albumTitle)
+			if err != nil {
+				if warningCollector != nil {
+					warningCollector.AddMusicBrainzReleaseWarning(artist, albumTitle, err.Error())
+				}
+				return
+			}
 		}
 		
 		// Cache the successful result
