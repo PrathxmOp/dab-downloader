@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,8 +74,10 @@ func TestMusicBrainzClientDirectly(t *testing.T) {
 	// Create a metadata processor for testing
 	processor := NewMetadataProcessor()
 	
+	ctx := context.Background()
+	
 	// Test track search
-	track, err := processor.mbClient.SearchTrack("Queen", "A Night at the Opera", "Bohemian Rhapsody")
+	track, err := processor.mbClient.SearchTrack(ctx, "Queen", "A Night at the Opera", "Bohemian Rhapsody")
 	if err != nil {
 		t.Logf("Track search failed (this might be expected): %v", err)
 	} else {
@@ -85,7 +88,7 @@ func TestMusicBrainzClientDirectly(t *testing.T) {
 	}
 
 	// Test release search
-	release, err := processor.mbClient.SearchRelease("Queen", "A Night at the Opera")
+	release, err := processor.mbClient.SearchRelease(ctx, "Queen", "A Night at the Opera")
 	if err != nil {
 		t.Logf("Release search failed (this might be expected): %v", err)
 	} else {
@@ -98,7 +101,7 @@ func TestMusicBrainzClientDirectly(t *testing.T) {
 
 	// Test ISRC search with a known ISRC
 	t.Log("Testing ISRC-based search...")
-	isrcTrack, err := processor.mbClient.SearchTrackByISRC("GBUM71505078") // Bohemian Rhapsody ISRC
+	isrcTrack, err := processor.mbClient.SearchTrackByISRC(ctx, "GBUM71505078") // Bohemian Rhapsody ISRC
 	if err != nil {
 		t.Logf("ISRC search failed (this might be expected): %v", err)
 	} else {
@@ -341,7 +344,8 @@ func TestReleaseSelectionDebug(t *testing.T) {
 	
 	// Get the raw MusicBrainz track data to see what releases are available
 	processor := NewMetadataProcessor()
-	mbTrack, err := processor.mbClient.SearchTrackByISRC(isrc)
+	ctx := context.Background()
+	mbTrack, err := processor.mbClient.SearchTrackByISRC(ctx, isrc)
 	if err != nil {
 		t.Logf("ISRC search failed: %v", err)
 		return
@@ -364,7 +368,7 @@ func TestReleaseSelectionDebug(t *testing.T) {
 		
 		// Test with track count that should match a specific release
 		for expectedCount := 1; expectedCount <= 15; expectedCount++ {
-			selected := processor.selectBestMBRelease(mbTrack.Releases, expectedCount)
+			selected := processor.selectBestTrackRelease(mbTrack.Releases, expectedCount)
 			totalTracks := 0
 			for _, media := range selected.Media {
 				totalTracks += len(media.Tracks)
@@ -408,7 +412,8 @@ func TestIntelligentReleaseSelection(t *testing.T) {
 			
 			// Get the release title for context
 			processor := NewMetadataProcessor()
-			mbTrack, err := processor.mbClient.SearchTrackByISRC("GBUM71505078")
+			ctx := context.Background()
+			mbTrack, err := processor.mbClient.SearchTrackByISRC(ctx, "GBUM71505078")
 			if err == nil {
 				for _, release := range mbTrack.Releases {
 					if release.ID == metadata.ReleaseID {
@@ -430,7 +435,8 @@ func TestDigitalMediaPreference(t *testing.T) {
 	
 	// Get the raw MusicBrainz track data to see what formats are available
 	processor := NewMetadataProcessor()
-	mbTrack, err := processor.mbClient.SearchTrackByISRC(isrc)
+	ctx := context.Background()
+	mbTrack, err := processor.mbClient.SearchTrackByISRC(ctx, isrc)
 	if err != nil {
 		t.Logf("ISRC search failed: %v", err)
 		return

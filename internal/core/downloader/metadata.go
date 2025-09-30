@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -32,45 +33,7 @@ type ISRCMetadata struct {
 	TrackArtistID    string
 }
 
-// Release represents a simplified MusicBrainz release for scoring
-type Release struct {
-	ID           string
-	Title        string
-	Date         string
-	ArtistCredit []ArtistCredit
-	ReleaseGroup ReleaseGroup
-	Media        []Media
-}
-
-type ArtistCredit struct {
-	Artist Artist `json:"artist"`
-}
-
-type Artist struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type ReleaseGroup struct {
-	ID string `json:"id"`
-}
-
-type Media struct {
-	Format string `json:"format"`
-	Discs  []Disc `json:"discs"`
-	Tracks []Track `json:"tracks"`
-}
-
-type Disc struct {
-	ID string `json:"id"`
-}
-
-type Track struct {
-	ID     string `json:"id"`
-	Number string `json:"number"`
-	Title  string `json:"title"`
-	Length int    `json:"length"`
-}
+// These types are now imported from the musicbrainz package
 
 // ============================================================================
 // 2. Constructor and Configuration
@@ -78,14 +41,14 @@ type Track struct {
 
 // MetadataProcessor handles FLAC metadata operations
 type MetadataProcessor struct {
-	mbClient *musicbrainz.MusicBrainzClient
+	mbClient *musicbrainz.Client
 	cache    *AlbumMetadataCache
 }
 
 // NewMetadataProcessor creates a new metadata processor with default settings
 func NewMetadataProcessor() *MetadataProcessor {
 	return &MetadataProcessor{
-		mbClient: musicbrainz.NewMusicBrainzClientWithDebug(false),
+		mbClient: musicbrainz.NewClient(),
 		cache:    NewAlbumMetadataCache(),
 	}
 }
@@ -101,7 +64,7 @@ func (mp *MetadataProcessor) SetDebugMode(debug bool) {
 
 // AlbumMetadataCache holds cached MusicBrainz release metadata for albums
 type AlbumMetadataCache struct {
-	releases   map[string]*musicbrainz.MusicBrainzRelease
+	releases   map[string]*musicbrainz.Release
 	releaseIDs map[string]string
 	mu         sync.RWMutex
 }
@@ -109,13 +72,13 @@ type AlbumMetadataCache struct {
 // NewAlbumMetadataCache creates a new album metadata cache
 func NewAlbumMetadataCache() *AlbumMetadataCache {
 	return &AlbumMetadataCache{
-		releases:   make(map[string]*musicbrainz.MusicBrainzRelease),
+		releases:   make(map[string]*musicbrainz.Release),
 		releaseIDs: make(map[string]string),
 	}
 }
 
 // GetCachedRelease retrieves cached release metadata
-func (cache *AlbumMetadataCache) GetCachedRelease(artist, album string) *musicbrainz.MusicBrainzRelease {
+func (cache *AlbumMetadataCache) GetCachedRelease(artist, album string) *musicbrainz.Release {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
 	return cache.releases[getCacheKey(artist, album)]
@@ -136,7 +99,7 @@ func (cache *AlbumMetadataCache) SetCachedReleaseID(artist, album, releaseID str
 }
 
 // SetCachedRelease stores release metadata in cache
-func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release *musicbrainz.MusicBrainzRelease) {
+func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release *musicbrainz.Release) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	cache.releases[getCacheKey(artist, album)] = release
@@ -146,7 +109,7 @@ func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release 
 func (cache *AlbumMetadataCache) ClearCache() {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	cache.releases = make(map[string]*musicbrainz.MusicBrainzRelease)
+	cache.releases = make(map[string]*musicbrainz.Release)
 	cache.releaseIDs = make(map[string]string)
 }
 
@@ -225,7 +188,8 @@ func (mp *MetadataProcessor) GetISRCMetadata(isrc string) (*ISRCMetadata, error)
 
 // GetISRCMetadataWithTrackCount extracts comprehensive metadata from ISRC lookup with intelligent release selection
 func (mp *MetadataProcessor) GetISRCMetadataWithTrackCount(isrc string, expectedTrackCount int) (*ISRCMetadata, error) {
-	mbTrack, err := mp.mbClient.SearchTrackByISRC(isrc)
+	ctx := context.Background()
+	mbTrack, err := mp.mbClient.SearchTrackByISRC(ctx, isrc)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +203,7 @@ func (mp *MetadataProcessor) GetISRCMetadataWithTrackCount(isrc string, expected
 	}
 	
 	if len(mbTrack.Releases) > 0 {
-		selectedRelease := mp.selectBestMBRelease(mbTrack.Releases, expectedTrackCount)
+		selectedRelease := mp.selectBestTrackRelease(mbTrack.Releases, expectedTrackCount)
 		metadata.ReleaseID = selectedRelease.ID
 		metadata.ReleaseGroupID = selectedRelease.ReleaseGroup.ID
 		
@@ -437,16 +401,17 @@ func (mp *MetadataProcessor) addISRCMetadataFields(comment *flacvorbis.MetaDataB
 
 // addTrackMetadata adds track-level MusicBrainz metadata
 func (mp *MetadataProcessor) addTrackMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track shared.Track, albumTitle string, warningCollector *shared.WarningCollector) {
-	var mbTrack *musicbrainz.MusicBrainzTrack
+	var mbTrack *musicbrainz.Track
 	var err error
+	ctx := context.Background()
 	
 	if track.ISRC != "" {
-		mbTrack, err = mp.mbClient.SearchTrackByISRC(track.ISRC)
+		mbTrack, err = mp.mbClient.SearchTrackByISRC(ctx, track.ISRC)
 		if err != nil {
-			mbTrack, err = mp.mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
+			mbTrack, err = mp.mbClient.SearchTrack(ctx, track.Artist, albumTitle, track.Title)
 		}
 	} else {
-		mbTrack, err = mp.mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
+		mbTrack, err = mp.mbClient.SearchTrack(ctx, track.Artist, albumTitle, track.Title)
 	}
 	
 	if err != nil {
@@ -465,15 +430,16 @@ func (mp *MetadataProcessor) addTrackMetadata(comment *flacvorbis.MetaDataBlockV
 // addReleaseMetadata handles release-level MusicBrainz metadata with caching
 func (mp *MetadataProcessor) addReleaseMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, artist, albumTitle string, warningCollector *shared.WarningCollector) {
 	mbRelease := mp.cache.GetCachedRelease(artist, albumTitle)
+	ctx := context.Background()
 	
 	if mbRelease == nil {
 		releaseID := mp.cache.GetCachedReleaseID(artist, albumTitle)
 		
 		var err error
 		if releaseID != "" {
-			mbRelease, err = mp.mbClient.GetReleaseMetadata(releaseID)
+			mbRelease, err = mp.mbClient.GetReleaseMetadata(ctx, releaseID)
 		} else {
-			mbRelease, err = mp.mbClient.SearchRelease(artist, albumTitle)
+			mbRelease, err = mp.mbClient.SearchRelease(ctx, artist, albumTitle)
 		}
 		
 		if err != nil {
@@ -542,96 +508,21 @@ func (mp *MetadataProcessor) saveFLACFile(f *flac.File, filePath string) error {
 	return nil
 }
 
-// selectBestMBRelease chooses the most appropriate MusicBrainz release based on intelligent heuristics
-func (mp *MetadataProcessor) selectBestMBRelease(releases []struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Date  string `json:"date"`
-	ArtistCredit []struct {
-		Artist struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"artist"`
-	} `json:"artist-credit"`
-	ReleaseGroup struct {
-		ID string `json:"id"`
-	} `json:"release-group"`
-	Media []struct {
-		Format string `json:"format"`
-		Discs  []struct {
-			ID string `json:"id"`
-		} `json:"discs"`
-		Tracks []struct {
-			ID     string `json:"id"`
-			Number string `json:"number"`
-			Title  string `json:"title"`
-			Length int    `json:"length"`
-		} `json:"tracks"`
-	} `json:"media"`
-}, expectedTrackCount int) struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Date  string `json:"date"`
-	ArtistCredit []struct {
-		Artist struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"artist"`
-	} `json:"artist-credit"`
-	ReleaseGroup struct {
-		ID string `json:"id"`
-	} `json:"release-group"`
-	Media []struct {
-		Format string `json:"format"`
-		Discs  []struct {
-			ID string `json:"id"`
-		} `json:"discs"`
-		Tracks []struct {
-			ID     string `json:"id"`
-			Number string `json:"number"`
-			Title  string `json:"title"`
-			Length int    `json:"length"`
-		} `json:"tracks"`
-	} `json:"media"`
-} {
+// selectBestTrackRelease chooses the most appropriate track release based on intelligent heuristics
+func (mp *MetadataProcessor) selectBestTrackRelease(releases []musicbrainz.TrackRelease, expectedTrackCount int) musicbrainz.TrackRelease {
 	if len(releases) == 1 {
 		return releases[0]
 	}
 	
 	type scoredRelease struct {
-		release struct {
-			ID    string `json:"id"`
-			Title string `json:"title"`
-			Date  string `json:"date"`
-			ArtistCredit []struct {
-				Artist struct {
-					ID   string `json:"id"`
-					Name string `json:"name"`
-				} `json:"artist"`
-			} `json:"artist-credit"`
-			ReleaseGroup struct {
-				ID string `json:"id"`
-			} `json:"release-group"`
-			Media []struct {
-				Format string `json:"format"`
-				Discs  []struct {
-					ID string `json:"id"`
-				} `json:"discs"`
-				Tracks []struct {
-					ID     string `json:"id"`
-					Number string `json:"number"`
-					Title  string `json:"title"`
-					Length int    `json:"length"`
-				} `json:"tracks"`
-			} `json:"media"`
-		}
-		score int
+		release musicbrainz.TrackRelease
+		score   int
 	}
 	
 	var scoredReleases []scoredRelease
 	
 	for _, release := range releases {
-		score := mp.scoreMBRelease(release, expectedTrackCount)
+		score := mp.scoreTrackRelease(release, expectedTrackCount)
 		scoredReleases = append(scoredReleases, scoredRelease{
 			release: release,
 			score:   score,
@@ -650,13 +541,13 @@ func (mp *MetadataProcessor) selectBestMBRelease(releases []struct {
 }
 
 // selectBestRelease chooses the most appropriate release based on intelligent heuristics
-func (mp *MetadataProcessor) selectBestRelease(releases []Release, expectedTrackCount int) Release {
+func (mp *MetadataProcessor) selectBestRelease(releases []musicbrainz.Release, expectedTrackCount int) musicbrainz.Release {
 	if len(releases) == 1 {
 		return releases[0]
 	}
 	
 	type scoredRelease struct {
-		release Release
+		release musicbrainz.Release
 		score   int
 	}
 	
@@ -681,33 +572,8 @@ func (mp *MetadataProcessor) selectBestRelease(releases []Release, expectedTrack
 	return bestRelease.release
 }
 
-// scoreMBRelease calculates a score for a MusicBrainz release based on various factors
-func (mp *MetadataProcessor) scoreMBRelease(release struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Date  string `json:"date"`
-	ArtistCredit []struct {
-		Artist struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"artist"`
-	} `json:"artist-credit"`
-	ReleaseGroup struct {
-		ID string `json:"id"`
-	} `json:"release-group"`
-	Media []struct {
-		Format string `json:"format"`
-		Discs  []struct {
-			ID string `json:"id"`
-		} `json:"discs"`
-		Tracks []struct {
-			ID     string `json:"id"`
-			Number string `json:"number"`
-			Title  string `json:"title"`
-			Length int    `json:"length"`
-		} `json:"tracks"`
-	} `json:"media"`
-}, expectedTrackCount int) int {
+// scoreTrackRelease calculates a score for a track release based on various factors
+func (mp *MetadataProcessor) scoreTrackRelease(release musicbrainz.TrackRelease, expectedTrackCount int) int {
 	score := 0
 	title := strings.ToLower(release.Title)
 	
@@ -743,35 +609,14 @@ func (mp *MetadataProcessor) scoreMBRelease(release struct {
 		score += 15
 	}
 	
-	// Format preferences - convert MusicBrainz media to our Media type for scoring
-	var mediaList []Media
-	for _, m := range release.Media {
-		var discs []Disc
-		for _, d := range m.Discs {
-			discs = append(discs, Disc{ID: d.ID})
-		}
-		var tracks []Track
-		for _, t := range m.Tracks {
-			tracks = append(tracks, Track{
-				ID:     t.ID,
-				Number: t.Number,
-				Title:  t.Title,
-				Length: t.Length,
-			})
-		}
-		mediaList = append(mediaList, Media{
-			Format: m.Format,
-			Discs:  discs,
-			Tracks: tracks,
-		})
-	}
-	score += mp.scoreByFormat(mediaList)
+	// Format preferences
+	score += mp.scoreByFormat(release.Media)
 	
 	return score
 }
 
 // scoreRelease calculates a score for a release based on various factors
-func (mp *MetadataProcessor) scoreRelease(release Release, expectedTrackCount int) int {
+func (mp *MetadataProcessor) scoreRelease(release musicbrainz.Release, expectedTrackCount int) int {
 	score := 0
 	title := strings.ToLower(release.Title)
 	
@@ -858,7 +703,7 @@ func (mp *MetadataProcessor) looksLikeCompilation(title string) bool {
 }
 
 // scoreByFormat scores releases based on their media format
-func (mp *MetadataProcessor) scoreByFormat(media []Media) int {
+func (mp *MetadataProcessor) scoreByFormat(media []musicbrainz.Media) int {
 	for _, m := range media {
 		format := strings.ToLower(m.Format)
 		switch format {
