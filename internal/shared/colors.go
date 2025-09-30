@@ -12,7 +12,8 @@ var (
 	ColorSuccess = color.New(color.FgGreen)
 	ColorWarning = color.New(color.FgYellow)
 	ColorError   = color.New(color.FgRed)
-	ColorPrompt  = color.New(color.FgBlue, color.Bold) // Added for user prompts
+	ColorPrompt  = color.New(color.FgBlue, color.Bold)
+	ColorDebug   = color.New(color.FgMagenta, color.Faint) // Added for debug messages
 )
 
 // InitializeColors initializes color output based on TTY detection

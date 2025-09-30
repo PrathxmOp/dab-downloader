@@ -195,7 +195,7 @@ func (td *TrackDownloader) performDownload(ctx context.Context, streamURL string
 
 	expectedSize := audioResp.ContentLength
 	if td.debug && expectedSize > 0 {
-		fmt.Printf("DEBUG: Expected file size: %d bytes\n", expectedSize)
+		shared.ColorDebug.Printf("DEBUG: Expected file size: %d bytes\n", expectedSize)
 	}
 
 	// Setup progress tracking
@@ -236,7 +236,7 @@ func (td *TrackDownloader) setupProgressTracking(body io.ReadCloser, contentLeng
 	}
 
 	if td.debug {
-		fmt.Println("DEBUG: Setting up progress tracking")
+		shared.ColorDebug.Println("DEBUG: Setting up progress tracking")
 	}
 
 	if contentLength <= 0 {
@@ -277,13 +277,13 @@ func (td *TrackDownloader) writeAudioFile(outputPath string, reader io.Reader) (
 func (td *TrackDownloader) verifySizeDuringDownload(expectedSize, actualSize int64, outputPath string) error {
 	if expectedSize > 0 && actualSize != expectedSize {
 		if td.debug {
-			fmt.Printf("DEBUG: File size mismatch - expected: %d, got: %d bytes\n", expectedSize, actualSize)
+			shared.ColorDebug.Printf("DEBUG: File size mismatch - expected: %d, got: %d bytes\n", expectedSize, actualSize)
 		}
 		return fmt.Errorf("incomplete download: expected %d bytes, got %d bytes", expectedSize, actualSize)
 	}
 
 	if td.debug && expectedSize > 0 {
-		fmt.Printf("DEBUG: Successfully downloaded %d bytes verified\n", actualSize)
+		shared.ColorDebug.Printf("DEBUG: Successfully downloaded %d bytes verified\n", actualSize)
 	}
 
 	return nil
@@ -379,7 +379,7 @@ func (td *TrackDownloader) getVerifyDownloads() bool {
 func (td *TrackDownloader) cleanup(filePath string) error {
 	if err := os.Remove(filePath); err != nil {
 		if td.debug {
-			fmt.Printf("DEBUG: Failed to cleanup file %s: %v\n", filePath, err)
+			shared.ColorDebug.Printf("DEBUG: Failed to cleanup file %s: %v\n", filePath, err)
 		}
 		return err
 	}

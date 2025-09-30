@@ -44,6 +44,7 @@ type DabAPI struct {
 	rateLimiter    *rate.Limiter
 	rateLimitHits  int
 	mu             sync.Mutex
+	debug          bool
 }
 
 // NewDabAPI creates a new API client with default configuration
@@ -53,7 +54,13 @@ func NewDabAPI(endpoint, outputLocation string, client *http.Client) *DabAPI {
 		outputLocation: outputLocation,
 		client:         client,
 		rateLimiter:    rate.NewLimiter(rate.Every(defaultRateLimit), defaultBurstLimit),
+		debug:          false,
 	}
+}
+
+// SetDebugMode enables or disables debug logging for the DAB API client
+func (api *DabAPI) SetDebugMode(debug bool) {
+	api.debug = debug
 }
 
 // Request makes HTTP requests to the API with intelligent retry handling
@@ -247,10 +254,12 @@ func (api *DabAPI) waitWithContext(ctx context.Context, delay time.Duration) err
 	}
 }
 
-// logRetryAttempt logs retry attempts for user transparency
+// logRetryAttempt logs retry attempts for user transparency (only in debug mode)
 func (api *DabAPI) logRetryAttempt(delay time.Duration, attempt int) {
-	shared.ColorWarning.Printf("⚠️ Rate limit hit (429), retrying in %v (attempt %d/%d)\n", 
-		delay, attempt, maxRetries)
+	if api.debug {
+		shared.ColorDebug.Printf("⚠️ Rate limit hit (429), retrying in %v (attempt %d/%d)\n", 
+			delay, attempt, maxRetries)
+	}
 }
 
 // handleExhaustedRetries handles the case when all retries are exhausted
