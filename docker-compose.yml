@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   dab-downloader:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: prathxm/dab-downloader:latest
     container_name: dab-downloader
     volumes:
       # Mount a local directory for configuration (e.g., config.json)

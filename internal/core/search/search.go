@@ -1,21 +1,25 @@
-package main
+package search
 
 import (
 	"context"
 	"fmt"
+	
+	"dab-downloader/internal/shared"
+	"dab-downloader/internal/api/dab"
+	"dab-downloader/internal/config"
 )
 
-func handleSearch(ctx context.Context, api *DabAPI, query string, searchType string, debug bool, auto bool) ([]interface{}, []string, error) {
-	colorInfo.Printf("🔎 Searching for '%s' (type: %s)...", query, searchType)
+func HandleSearch(ctx context.Context, api *dab.DabAPI, query string, searchType string, debug bool, auto bool, cfg *config.Config) ([]interface{}, []string, error) {
+	shared.ColorInfo.Printf("🔎 Searching for '%s' (type: %s)...", query, searchType)
 
-	results, err := api.Search(ctx, query, searchType, 10)
+	results, err := api.Search(ctx, query, searchType, 10, debug)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	totalResults := len(results.Artists) + len(results.Albums) + len(results.Tracks)
 	if totalResults == 0 {
-		colorWarning.Println("No results found.")
+		shared.ColorWarning.Println("No results found.")
 		return nil, nil, nil
 	}
 
@@ -35,39 +39,48 @@ func handleSearch(ctx context.Context, api *DabAPI, query string, searchType str
 		return selectedItems, itemTypes, nil
 	}
 
-	colorInfo.Printf("Found %d results:\n", totalResults)
+	shared.ColorInfo.Printf("Found %d results:\n", totalResults)
 
 	// Display results
 	counter := 1
 	if len(results.Artists) > 0 {
-		colorInfo.Println("\n--- Artists ---")
+		shared.ColorInfo.Println("\n--- Artists ---")
 		for _, artist := range results.Artists {
 			fmt.Printf("%d. %s\n", counter, artist.Name)
 			counter++
 		}
 	}
 	if len(results.Albums) > 0 {
-		colorInfo.Println("\n--- Albums ---")
+		shared.ColorInfo.Println("\n--- Albums ---")
 		for _, album := range results.Albums {
-			fmt.Printf("%d. %s - %s\n", counter, album.Title, album.Artist)
+			prefix := fmt.Sprintf("%d. ", counter)
+			formattedLine := shared.FormatAlbumWithBitrate(prefix, album.Title, album.Artist, "", album.AudioQuality)
+			fmt.Println(formattedLine)
 			counter++
 		}
 	}
 	if len(results.Tracks) > 0 {
-		colorInfo.Println("\n--- Tracks ---")
+		shared.ColorInfo.Println("\n--- Tracks ---")
 		for _, track := range results.Tracks {
-			fmt.Printf("%d. %s - %s (%s)\n", counter, track.Title, track.Artist, track.Album)
+			prefix := fmt.Sprintf("%d. ", counter)
+			// Use AlbumTitle if available, fallback to Album
+			albumName := track.AlbumTitle
+			if albumName == "" {
+				albumName = track.Album
+			}
+			formattedLine := shared.FormatTrackWithBitrate(prefix, track.Title, track.Artist, albumName, track.AudioQuality)
+			fmt.Println(formattedLine)
 			counter++
 		}
 	}
 
 	// Prompt for selection
-	selectionStr := GetUserInput("\nEnter numbers to download (e.g., '1,3,5-7' or 'q' to quit)", "")
+	selectionStr := shared.GetUserInput("\nEnter numbers to download (e.g., '1,3,5-7' or 'q' to quit)", "")
 	if selectionStr == "q" || selectionStr == "" {
 		return nil, nil, nil
 	}
 
-	selectedIndices, err := ParseSelectionInput(selectionStr, totalResults)
+	selectedIndices, err := shared.ParseSelectionInput(selectionStr, totalResults)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid selection: %w", err)
 	}
@@ -98,21 +111,4 @@ func handleSearch(ctx context.Context, api *DabAPI, query string, searchType str
 	}
 
 	return selectedItems, itemTypes, nil
-}
-
-func searchAndGetTracks(ctx context.Context, api *DabAPI, query string, searchType string, debug bool, auto bool) ([]Track, error) {
-	colorInfo.Printf("🔎 Searching for '%s' (type: %s)...", query, searchType)
-
-	results, err := api.Search(ctx, query, searchType, 10)
-	if err != nil {
-		return nil, err
-	}
-
-	totalResults := len(results.Artists) + len(results.Albums) + len(results.Tracks)
-	if totalResults == 0 {
-		colorWarning.Println("No results found.")
-		return nil, nil
-	}
-
-	return results.Tracks, nil
 }

@@ -1,4 +1,4 @@
-package main
+package downloader
 
 import (
 	"fmt"
@@ -21,14 +21,14 @@ func ConvertTrack(inputFile, format, bitrate string) (string, error) {
 	var cmd *exec.Cmd
 	switch format {
 	case "mp3":
-		cmd = exec.Command("ffmpeg", "-i", inputFile, "-b:a", bitrate+"k", "-vn", outputFile)
+		cmd = exec.Command("ffmpeg", "-i", inputFile, "-b:a", bitrate+"k", "-vn", "-map_metadata", "0", outputFile)
 	case "ogg":
 		// For ogg, -q:a (quality) is often preferred over bitrate.
 		// A mapping from bitrate to quality could be implemented if needed.
 		// For now, using a high quality setting.
-		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c:a", "libvorbis", "-q:a", "8", "-vn", outputFile)
+		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c:a", "libvorbis", "-q:a", "8", "-vn", "-map_metadata", "0", outputFile)
 	case "opus":
-		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c:a", "libopus", "-b:a", bitrate+"k", "-vn", outputFile)
+		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c:a", "libopus", "-b:a", bitrate+"k", "-vn", "-map_metadata", "0", outputFile)
 	default:
 		return "", fmt.Errorf("unsupported format: %s", format)
 	}

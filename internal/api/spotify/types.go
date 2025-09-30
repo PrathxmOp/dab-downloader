@@ -1,11 +1,10 @@
-package main
+package spotify
 
 import (
 	"github.com/zmb3/spotify/v2"
 )
 
 // SpotifyClient holds the spotify client and other required fields
-
 type SpotifyClient struct {
 	client *spotify.Client
 	ID     string
@@ -18,4 +17,12 @@ func NewSpotifyClient(id, secret string) *SpotifyClient {
 		ID:     id,
 		Secret: secret,
 	}
+}
+
+// SpotifyTrack represents a track from Spotify
+type SpotifyTrack struct {
+	Name        string
+	Artist      string
+	AlbumName   string
+	AlbumArtist string
 }

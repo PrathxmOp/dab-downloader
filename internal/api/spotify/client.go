@@ -1,4 +1,4 @@
-package main
+package spotify
 
 import (
 	"context"
@@ -10,12 +10,6 @@ import (
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
 	"golang.org/x/oauth2/clientcredentials"
 )
-
-// SpotifyTrack represents a track from Spotify
-type SpotifyTrack struct {
-	Name   string `json:"name"`
-	Artist string `json:"artist"`
-}
 
 // Authenticate authenticates the client with the spotify api
 func (s *SpotifyClient) Authenticate() error {
@@ -53,10 +47,30 @@ func (s *SpotifyClient) GetPlaylistTracks(playlistURL string) ([]SpotifyTrack, s
 	log.Printf("Spotify Playlist Name: %s", playlist.Name)
 
 	var tracks []SpotifyTrack // Updated type
-	for _, item := range playlist.Tracks.Tracks {
-		trackName := item.Track.Name
-		artistName := item.Track.Artists[0].Name
-		tracks = append(tracks, SpotifyTrack{Name: trackName, Artist: artistName}) // Updated append
+	for {
+		for _, item := range playlist.Tracks.Tracks {
+			if item.Track.Album.Name == "" {
+				continue // Skip tracks with no album info
+			}
+			trackName := item.Track.Name
+			artistName := item.Track.Artists[0].Name
+			albumName := item.Track.Album.Name
+			albumArtist := item.Track.Album.Artists[0].Name
+			tracks = append(tracks, SpotifyTrack{
+				Name:        trackName,
+				Artist:      artistName,
+				AlbumName:   albumName,
+				AlbumArtist: albumArtist,
+			}) // Updated append
+		}
+
+		err = s.client.NextPage(context.Background(), &playlist.Tracks)
+		if err == spotify.ErrNoMorePages {
+			break
+		}
+		if err != nil {
+			return nil, "", err
+		}
 	}
 
 	return tracks, playlist.Name, nil // Updated return to include playlist.Name
@@ -83,30 +97,13 @@ func (s *SpotifyClient) GetAlbumTracks(albumURL string) ([]SpotifyTrack, string,
 	for _, track := range album.Tracks.Tracks {
 		trackName := track.Name
 		artistName := track.Artists[0].Name
-		tracks = append(tracks, SpotifyTrack{Name: trackName, Artist: artistName})
+		tracks = append(tracks, SpotifyTrack{
+			Name:        trackName,
+			Artist:      artistName,
+			AlbumName:   album.Name,
+			AlbumArtist: album.Artists[0].Name,
+		})
 	}
 
 	return tracks, album.Name, nil
-}
-
-// GetTrack gets a single track from a spotify track url
-func (s *SpotifyClient) GetTrack(trackURL string) (*SpotifyTrack, error) {
-	parts := strings.Split(trackURL, "/")
-	if len(parts) < 5 || parts[3] != "track" {
-		return nil, fmt.Errorf("invalid track URL")
-	}
-	trackIDStr := strings.Split(parts[4], "?")[0]
-	trackID := spotify.ID(trackIDStr)
-
-	log.Printf("Fetching track: %s", trackID)
-
-	track, err := s.client.GetTrack(context.Background(), trackID)
-	if err != nil {
-		return nil, err
-	}
-
-	trackName := track.Name
-	artistName := track.Artists[0].Name
-
-	return &SpotifyTrack{Name: trackName, Artist: artistName}, nil
 }

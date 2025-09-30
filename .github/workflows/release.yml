@@ -11,8 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # Grant write permissions for GITHUB_TOKEN to create releases and upload assets
+    outputs:
+      tag_name: ${{ env.VERSION }} # Output the version from version.json
     steps:
     - uses: actions/checkout@v3
+
+    - name: Get version from version.json
+      id: get_version
+      run: |
+        VERSION=$(cat version/version.json | jq -r '.version')
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -24,42 +32,81 @@ jobs:
         go mod tidy
         go mod download
 
-    - name: Get current date and commit hash for versioning
-      id: version_info
-      run: |
-        echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
-        echo "COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-
-    - name: Set TAG_NAME
-      run: echo "TAG_NAME=v${{ env.DATE }}-${{ env.COMMIT }}" >> $GITHUB_ENV
-
     - name: Build for Linux
       run: |
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=${{ env.TAG_NAME }}" -o dab-downloader-linux-amd64
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dab-downloader-linux-amd64
     - name: Build for Windows
       run: |
-        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version=${{ env.TAG_NAME }}" -o dab-downloader-windows-amd64.exe
+        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o dab-downloader-windows-amd64.exe
     - name: Build for macOS
       run: |
-        CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.version=${{ env.TAG_NAME }}" -o dab-downloader-macos-amd64
+        CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o dab-downloader-macos-amd64
+
+    - name: Build for Linux (ARM64)
+      run: |
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dab-downloader-linux-arm64
 
     - name: Create and Push Git Tag
       run: |
         git config user.name github-actions
         git config user.email github-actions@github.com
-        git tag ${{ env.TAG_NAME }}
-        git push origin ${{ env.TAG_NAME }}
+        git tag ${{ env.VERSION }}
+        git push origin ${{ env.VERSION }}
+
+    - name: Generate Changelog
+      id: generate_changelog
+      run: |
+        CHANGELOG=$(git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s (%h)")
+        echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+        echo "$CHANGELOG" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
 
     - name: Create GitHub Release
+      id: create_release
       uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ env.TAG_NAME }}
-        name: Release ${{ env.TAG_NAME }}
+        tag_name: ${{ env.VERSION }}
+        name: Release ${{ env.VERSION }}
+        body: ${{ env.CHANGELOG }}
         draft: false
         prerelease: false
         files: |
           ./dab-downloader-linux-amd64
           ./dab-downloader-windows-amd64.exe
           ./dab-downloader-macos-amd64
+          ./dab-downloader-linux-arm64
+
+    - name: Verify Release Creation
+      run: |
+        gh auth setup-git
+        gh release list
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-push-docker:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: build # This job depends on the 'build' job to ensure TAG_NAME is available
+    permissions:
+      contents: read
+      packages: write # To push to GitHub Packages, or adjust for Docker Hub
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: |
+          prathxm/dab-downloader:${{ needs.build.outputs.tag_name }}
+          prathxm/dab-downloader:latest
