@@ -80,10 +80,7 @@ func runArtistCommand(cmd *cobra.Command, args []string) error {
 		serviceContainer.Logger.Success("✅ Discography download completed!")
 	}
 	
-	// Display warning summary FIRST
-	if serviceContainer.WarningCollector.(*shared.WarningCollector).HasWarnings() {
-		serviceContainer.WarningCollector.(*shared.WarningCollector).PrintSummary()
-	}
+	// Warnings are now displayed by the calling command (search.go) before the summary
 	
 	if debug {
 		serviceContainer.Logger.Debug("DEBUG: After warnings, about to check summary condition")

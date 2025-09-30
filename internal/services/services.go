@@ -121,6 +121,7 @@ func (cs *ConfigService) GetDefaultConfig() *config.Config {
 		Parallelism:      3,
 		Format:           "flac",
 		Bitrate:          "320",
+		SaveAlbumArt:     true,
 		VerifyDownloads:  true,
 		MaxRetryAttempts: 3,
 		WarningBehavior:  "display",
@@ -274,6 +275,11 @@ func (ds *DownloadService) DownloadTracks(ctx context.Context, tracks []shared.T
 	
 	// Download cover art
 	coverData := ds.downloadCoverArt(ctx, album)
+	
+	// Save cover art as cover.jpg if configured to do so
+	if err := ds.saveCoverArtToFile(coverData, album, cfg); err != nil {
+		ds.logger.Warning("Failed to save cover art file: %v", err)
+	}
 	
 	// Download tracks with appropriate parallelism
 	return ds.downloadTracksWithParallelism(ctx, tracks, album, coverData, cfg, debug, format, bitrate)
@@ -774,6 +780,51 @@ func (ds *DownloadService) downloadCoverArt(ctx context.Context, album *shared.A
 	}
 	
 	return coverData
+}
+
+// saveCoverArtToFile saves cover art data as cover.jpg in the album directory if SaveAlbumArt is enabled
+func (ds *DownloadService) saveCoverArtToFile(coverData []byte, album *shared.Album, cfg *config.Config) error {
+	if coverData == nil || len(coverData) == 0 || album == nil {
+		return nil // Nothing to save
+	}
+	
+	// Check if saving album art is enabled in config
+	if cfg == nil || !cfg.SaveAlbumArt {
+		return nil // Album art saving is disabled
+	}
+
+	// Create a dummy track to use the naming system to get the album directory
+	dummyTrack := shared.Track{
+		Album:       album.Title,
+		AlbumArtist: album.Artist,
+		Artist:      album.Artist,
+		Title:       "dummy",
+		TrackNumber: 1,
+	}
+
+	// Get the album directory path by getting a track path and removing the filename
+	trackPath := ds.fileSystem.GetDownloadPathWithTrack(dummyTrack, album, "flac", cfg)
+	albumDir := filepath.Dir(trackPath)
+
+	// Ensure the album directory exists
+	if err := ds.fileSystem.EnsureDirectoryExists(albumDir); err != nil {
+		return fmt.Errorf("failed to create album directory: %w", err)
+	}
+
+	// Define the cover art file path
+	coverPath := filepath.Join(albumDir, "cover.jpg")
+
+	// Check if cover.jpg already exists
+	if ds.fileSystem.FileExists(coverPath) {
+		return nil // Cover art already exists, skip
+	}
+
+	// Write the cover art data to cover.jpg
+	if err := os.WriteFile(coverPath, coverData, 0644); err != nil {
+		return fmt.Errorf("failed to write cover art file: %w", err)
+	}
+
+	return nil
 }
 
 func (ds *DownloadService) prefetchMetadata(ctx context.Context, tracks []shared.Track, album *shared.Album, cfg *config.Config, debug bool) {
