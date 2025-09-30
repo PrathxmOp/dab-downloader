@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"dab-downloader/internal/api/dab"
@@ -185,16 +186,59 @@ func (ds *DownloadService) DownloadArtist(ctx context.Context, artistID string, 
 		return nil, fmt.Errorf("failed to get artist: %w", err)
 	}
 	
-	filteredAlbums := ds.filterAlbumsByType(artist.Albums, filter)
+	// Check if user explicitly provided a filter
+	var filteredAlbums []shared.Album
+	var usedCustomSelection bool
+	
+	// If a specific filter was provided, use it directly
+	if filter != "" && filter != "all" {
+		filteredAlbums = ds.filterAlbumsByType(artist.Albums, filter)
+	} else {
+		// Present menu options to user
+		selectedFilter, cancelled := ds.presentDownloadMenu(artist.Albums)
+		if cancelled {
+			return &shared.DownloadStats{}, shared.ErrDownloadCancelled
+		}
+		
+		if selectedFilter == "custom" {
+			// Use existing custom selection logic
+			filteredAlbums = ds.selectCustomAlbums(artist.Albums)
+			usedCustomSelection = true
+			if len(filteredAlbums) == 0 {
+				return &shared.DownloadStats{}, shared.ErrNoItemsSelected
+			}
+		} else {
+			// Simulate custom selection for menu options 1-4
+			filteredAlbums = ds.simulateCustomSelection(artist.Albums, selectedFilter)
+			usedCustomSelection = true
+			if len(filteredAlbums) == 0 {
+				return &shared.DownloadStats{}, shared.ErrNoItemsSelected
+			}
+		}
+		
+		// For all menu-based selections, use individual feedback mode
+		if debug {
+			ds.logger.Debug("DEBUG: Using menu-based selection, downloading %d albums with individual feedback", len(filteredAlbums))
+		}
+		stats := ds.downloadAlbumsUnified(ctx, filteredAlbums, cfg, debug, format, bitrate, true)
+		if debug && stats != nil {
+			ds.logger.Debug("DEBUG: Download completed - Success: %d, Failed: %d, Skipped: %d", stats.SuccessCount, stats.FailedCount, stats.SkippedCount)
+		}
+		return stats, nil
+	}
+	
 	if len(filteredAlbums) == 0 {
 		return &shared.DownloadStats{}, nil
 	}
 	
-	if !noConfirm && !ds.confirmDownload(filteredAlbums) {
-		return &shared.DownloadStats{}, shared.ErrDownloadCancelled
+	// Skip confirmation if we already did custom selection or if noConfirm is set
+	if !noConfirm && !usedCustomSelection {
+		if !ds.confirmDownload(filteredAlbums) {
+			return &shared.DownloadStats{}, shared.ErrDownloadCancelled
+		}
 	}
 	
-	stats := ds.downloadAlbumsWithParallelism(ctx, filteredAlbums, cfg, debug, format, bitrate)
+	stats := ds.downloadAlbumsUnified(ctx, filteredAlbums, cfg, debug, format, bitrate, false)
 	return stats, nil
 }
 
@@ -278,6 +322,170 @@ func (ds *DownloadService) getParallelism(cfg *config.Config) int {
 	return parallelism
 }
 
+func (ds *DownloadService) presentDownloadMenu(albums []shared.Album) (string, bool) {
+	// Count albums by type
+	albumCount := 0
+	epCount := 0
+	singleCount := 0
+	
+	for _, album := range albums {
+		switch strings.ToLower(album.Type) {
+		case "album":
+			albumCount++
+		case "ep":
+			epCount++
+		case "single":
+			singleCount++
+		}
+	}
+	
+	// Display album summary
+	ds.logger.Info("Found %d albums:", len(albums))
+	
+	// Group and sort albums by type for display
+	groupedAlbums := ds.groupAndSortAlbums(albums)
+	
+	// Display albums grouped by type with improved formatting
+	counter := 1
+	for _, albumType := range []string{"ALBUM", "EP", "SINGLE"} {
+		albumsOfType := groupedAlbums[albumType]
+		if len(albumsOfType) > 0 {
+			// Display section header with better styling
+			fmt.Printf("\n")
+			shared.ColorInfo.Printf("┌─ %ss ", albumType)
+			shared.ColorWarning.Printf("(%d)", len(albumsOfType))
+			fmt.Printf("\n")
+			
+			for _, album := range albumsOfType {
+				// Get track count
+				trackCount := ds.getAlbumTrackCount(album)
+				
+				// Format track count with blue color and proper alignment
+				var trackCountStr string
+				if trackCount == 1 {
+					trackCountStr = shared.ColorPrompt.Sprintf("[ 1 Track ]")
+				} else if trackCount > 0 {
+					if trackCount < 10 {
+						trackCountStr = shared.ColorPrompt.Sprintf("[ %d Tracks]", trackCount)
+					} else {
+						trackCountStr = shared.ColorPrompt.Sprintf("[%d Tracks]", trackCount)
+					}
+				} else {
+					trackCountStr = shared.ColorPrompt.Sprintf("[ ? Tracks]")
+				}
+				
+				// Create a more professional display format
+				prefix := fmt.Sprintf("│ %2d. ", counter)
+				formattedLine := shared.FormatAlbumWithTrackCountProfessional(prefix, album.Title, album.Artist, album.ReleaseDate, trackCountStr, album.AudioQuality)
+				fmt.Println(formattedLine)
+				counter++
+			}
+		}
+	}
+	
+	// Add a bottom border
+	if counter > 1 {
+		termWidth := shared.GetTerminalWidth()
+		if termWidth < 80 {
+			termWidth = 80
+		}
+		borderLine := "└" + strings.Repeat("─", termWidth-2) + "\n"
+		fmt.Printf(borderLine)
+	}
+	
+	fmt.Println("\nWhat would you like to download?")
+	fmt.Printf("1) Everything (albums + EPs + singles)\n")
+	fmt.Printf("2) Only albums (%d)\n", albumCount)
+	fmt.Printf("3) Only EPs (%d)\n", epCount)
+	fmt.Printf("4) Only singles (%d)\n", singleCount)
+	fmt.Printf("5) Custom selection\n")
+	
+	for {
+		choice := shared.GetUserInput("Choose option (1-5, or q to quit)", "1")
+		
+		switch strings.ToLower(choice) {
+		case "q", "quit":
+			return "", true
+		case "1", "":
+			return "all", false
+		case "2":
+			if albumCount == 0 {
+				shared.ColorError.Printf("❌ No albums found for this artist.\n")
+				continue
+			}
+			return "albums", false
+		case "3":
+			if epCount == 0 {
+				shared.ColorError.Printf("❌ No EPs found for this artist.\n")
+				continue
+			}
+			return "eps", false
+		case "4":
+			if singleCount == 0 {
+				shared.ColorError.Printf("❌ No singles found for this artist.\n")
+				continue
+			}
+			return "singles", false
+		case "5":
+			return "custom", false
+		default:
+			shared.ColorError.Printf("❌ Invalid option. Please choose 1-5 or q to quit.\n")
+		}
+	}
+}
+
+func (ds *DownloadService) selectCustomAlbums(albums []shared.Album) []shared.Album {
+	if len(albums) == 0 {
+		return albums
+	}
+	
+	// Create the same display order as shown in presentDownloadMenu
+	groupedAlbums := ds.groupAndSortAlbums(albums)
+	var displayOrderAlbums []shared.Album
+	
+	// Build display order (same as in presentDownloadMenu)
+	for _, albumType := range []string{"ALBUM", "EP", "SINGLE"} {
+		albumsOfType := groupedAlbums[albumType]
+		for _, album := range albumsOfType {
+			displayOrderAlbums = append(displayOrderAlbums, album)
+		}
+	}
+	
+	// Don't show the list again - it was already shown in presentDownloadMenu
+	for {
+		input := shared.GetUserInput("Enter numbers to download (e.g., '1,3,5-7' or 'q' to quit)", "")
+		if input == "" {
+			shared.ColorError.Printf("❌ Please enter a selection or 'q' to quit.\n")
+			continue
+		}
+		
+		if strings.ToLower(input) == "q" || strings.ToLower(input) == "quit" {
+			return []shared.Album{}
+		}
+		
+		selectedIndices, err := shared.ParseSelectionInput(input, len(displayOrderAlbums))
+		if err != nil {
+			shared.ColorError.Printf("❌ Invalid selection: %v\n", err)
+			continue
+		}
+		
+		if len(selectedIndices) == 0 {
+			shared.ColorError.Printf("❌ No valid albums selected.\n")
+			continue
+		}
+		
+		// Convert indices to albums using display order (indices are 1-based)
+		var selectedAlbums []shared.Album
+		for _, index := range selectedIndices {
+			if index >= 1 && index <= len(displayOrderAlbums) {
+				selectedAlbums = append(selectedAlbums, displayOrderAlbums[index-1])
+			}
+		}
+		
+		return selectedAlbums
+	}
+}
+
 func (ds *DownloadService) confirmDownload(albums []shared.Album) bool {
 	ds.logger.Info("Found %d albums to download:", len(albums))
 	for i, album := range albums {
@@ -289,6 +497,242 @@ func (ds *DownloadService) confirmDownload(albums []shared.Album) bool {
 	confirmation := shared.GetUserInput("Continue with download? (y/n)", "y")
 	return strings.ToLower(confirmation) == "y" || strings.ToLower(confirmation) == "yes"
 }
+
+// groupAndSortAlbums groups albums by type and sorts them alphabetically within each group
+func (ds *DownloadService) groupAndSortAlbums(albums []shared.Album) map[string][]shared.Album {
+	grouped := make(map[string][]shared.Album)
+	
+	for _, album := range albums {
+		albumType := strings.ToUpper(album.Type)
+		// Normalize type names
+		switch albumType {
+		case "ALBUM", "LP", "":
+			albumType = "ALBUM"
+		case "EP":
+			albumType = "EP"
+		case "SINGLE":
+			albumType = "SINGLE"
+		default:
+			// Default unknown types to ALBUM
+			albumType = "ALBUM"
+		}
+		grouped[albumType] = append(grouped[albumType], album)
+	}
+	
+	// Sort each group alphabetically by title
+	for albumType := range grouped {
+		albums := grouped[albumType]
+		sort.Slice(albums, func(i, j int) bool {
+			return strings.ToLower(albums[i].Title) < strings.ToLower(albums[j].Title)
+		})
+		grouped[albumType] = albums
+	}
+	
+	return grouped
+}
+
+// getAlbumTrackCount attempts to get the track count for an album
+func (ds *DownloadService) getAlbumTrackCount(album shared.Album) int {
+	// First, try TotalTracks field
+	if album.TotalTracks > 0 {
+		return album.TotalTracks
+	}
+	
+	// Second, try counting the Tracks slice if it's populated
+	if len(album.Tracks) > 0 {
+		return len(album.Tracks)
+	}
+	
+	// If all else fails, return 0 (will display as "? Tracks")
+	return 0
+}
+
+// displayDownloadSummary shows a summary of the download results
+func (ds *DownloadService) displayDownloadSummary(stats *shared.DownloadStats, albums []shared.Album, cfg *config.Config) {
+	if stats == nil || (stats.SuccessCount == 0 && stats.FailedCount == 0 && stats.SkippedCount == 0) {
+		return
+	}
+	
+	// Get artist name from the first album
+	artistName := "Unknown Artist"
+	if len(albums) > 0 {
+		artistName = albums[0].Artist
+	}
+	
+	fmt.Printf("\n")
+	shared.ColorInfo.Printf("📊 Download Summary for %s:\n", artistName)
+	
+	if stats.SuccessCount > 0 {
+		shared.ColorSuccess.Printf("✅ Successfully downloaded: %d items\n", stats.SuccessCount)
+	}
+	
+	if stats.SkippedCount > 0 {
+		shared.ColorWarning.Printf("⏭️  Skipped (already exists): %d items\n", stats.SkippedCount)
+	}
+	
+	if stats.FailedCount > 0 {
+		shared.ColorError.Printf("❌ Failed downloads: %d items\n", stats.FailedCount)
+		if len(stats.FailedItems) > 0 {
+			shared.ColorError.Printf("   Failed items: %s\n", strings.Join(stats.FailedItems, ", "))
+		}
+	}
+	
+	// Show download location
+	shared.ColorSuccess.Printf("📁 Artist discography downloaded to: %s\n", cfg.DownloadLocation)
+	shared.ColorSuccess.Printf("🎉 Discography download completed for %s\n", artistName)
+}
+
+// simulateCustomSelection automatically selects albums based on filter type
+func (ds *DownloadService) simulateCustomSelection(albums []shared.Album, filter string) []shared.Album {
+	if len(albums) == 0 {
+		return albums
+	}
+	
+	// Create the same grouped and sorted display order as shown in the menu
+	groupedAlbums := ds.groupAndSortAlbums(albums)
+	var displayOrderAlbums []shared.Album
+	
+	// Build display order (same as in presentDownloadMenu)
+	for _, albumType := range []string{"ALBUM", "EP", "SINGLE"} {
+		albumsOfType := groupedAlbums[albumType]
+		for _, album := range albumsOfType {
+			displayOrderAlbums = append(displayOrderAlbums, album)
+		}
+	}
+	
+	// Filter based on the selected option
+	var selectedAlbums []shared.Album
+	for _, album := range displayOrderAlbums {
+		albumType := strings.ToLower(album.Type)
+		
+		switch filter {
+		case "all":
+			selectedAlbums = append(selectedAlbums, album)
+		case "albums":
+			if albumType == "album" {
+				selectedAlbums = append(selectedAlbums, album)
+			}
+		case "eps":
+			if albumType == "ep" {
+				selectedAlbums = append(selectedAlbums, album)
+			}
+		case "singles":
+			if albumType == "single" {
+				selectedAlbums = append(selectedAlbums, album)
+			}
+		}
+	}
+	
+	return selectedAlbums
+}
+
+// downloadAlbumsUnified is the single method for downloading multiple albums
+// individualFeedback: true = show individual album start/complete messages (like search command)
+//                    false = use bulk download approach (like discography command)
+func (ds *DownloadService) downloadAlbumsUnified(ctx context.Context, albums []shared.Album, cfg *config.Config, debug bool, format string, bitrate string, individualFeedback bool) *shared.DownloadStats {
+	if individualFeedback {
+		// Individual feedback mode - show start/complete message for each album
+		totalStats := &shared.DownloadStats{}
+		
+		for _, album := range albums {
+			ds.logger.Info("🎵 Starting album download for: %s by %s", album.Title, album.Artist)
+			albumStats, err := ds.DownloadAlbum(ctx, album.ID, cfg, debug, format, bitrate)
+			if err != nil {
+				ds.logger.Error("❌ Failed to download album %s: %v", album.Title, err)
+				totalStats.FailedCount++
+				totalStats.FailedItems = append(totalStats.FailedItems, album.Title)
+				continue
+			}
+			
+			// Merge stats
+			if albumStats != nil {
+				totalStats.SuccessCount += albumStats.SuccessCount
+				totalStats.FailedCount += albumStats.FailedCount
+				totalStats.SkippedCount += albumStats.SkippedCount
+				totalStats.FailedItems = append(totalStats.FailedItems, albumStats.FailedItems...)
+			}
+			
+			ds.logger.Success("✅ Album download completed for %s", album.Title)
+		}
+		
+		return totalStats
+	} else {
+		// Bulk mode - use parallelism without individual messages
+		maxWorkers := ds.getParallelism(cfg)
+		
+		if debug {
+			ds.logger.Debug("Using parallelism setting: %d workers for %d albums", maxWorkers, len(albums))
+		}
+		
+		if len(albums) == 1 || maxWorkers == 1 {
+			// Sequential download for single album or single worker
+			totalStats := &shared.DownloadStats{}
+			
+			for _, album := range albums {
+				albumStats, err := ds.DownloadAlbum(ctx, album.ID, cfg, debug, format, bitrate)
+				if err != nil {
+					ds.logger.Error("Failed to download album %s: %v", album.Title, err)
+					totalStats.FailedCount++
+					totalStats.FailedItems = append(totalStats.FailedItems, album.Title)
+					continue
+				}
+				
+				if albumStats != nil {
+					totalStats.SuccessCount += albumStats.SuccessCount
+					totalStats.FailedCount += albumStats.FailedCount
+					totalStats.SkippedCount += albumStats.SkippedCount
+					totalStats.FailedItems = append(totalStats.FailedItems, albumStats.FailedItems...)
+				}
+			}
+			
+			return totalStats
+		} else {
+			// Parallel download
+			totalStats := &shared.DownloadStats{}
+			albumChan := make(chan shared.Album, len(albums))
+			statsChan := make(chan *shared.DownloadStats, len(albums))
+			
+			// Start workers
+			for i := 0; i < maxWorkers; i++ {
+				go func() {
+					for album := range albumChan {
+						stats, err := ds.DownloadAlbum(ctx, album.ID, cfg, debug, format, bitrate)
+						if err != nil {
+							stats = &shared.DownloadStats{
+								FailedCount: 1,
+								FailedItems: []string{album.Title},
+							}
+						}
+						statsChan <- stats
+					}
+				}()
+			}
+			
+			// Send albums to workers
+			go func() {
+				defer close(albumChan)
+				for _, album := range albums {
+					albumChan <- album
+				}
+			}()
+			
+			// Collect results
+			for i := 0; i < len(albums); i++ {
+				stats := <-statsChan
+				if stats != nil {
+					totalStats.SuccessCount += stats.SuccessCount
+					totalStats.FailedCount += stats.FailedCount
+					totalStats.SkippedCount += stats.SkippedCount
+					totalStats.FailedItems = append(totalStats.FailedItems, stats.FailedItems...)
+				}
+			}
+			
+			return totalStats
+		}
+	}
+}
+
+
 
 func (ds *DownloadService) createMinimalAlbum(track *shared.Track) *shared.Album {
 	return &shared.Album{
@@ -343,19 +787,7 @@ func (ds *DownloadService) prefetchMetadata(ctx context.Context, tracks []shared
 	ds.prefetchTrackMetadata(ctx, tracks, album, maxWorkers, debug)
 }
 
-func (ds *DownloadService) downloadAlbumsWithParallelism(ctx context.Context, albums []shared.Album, cfg *config.Config, debug bool, format string, bitrate string) *shared.DownloadStats {
-	maxWorkers := ds.getParallelism(cfg)
-	
-	if debug {
-		ds.logger.Debug("Using parallelism setting: %d workers for %d albums", maxWorkers, len(albums))
-	}
-	
-	if len(albums) == 1 || maxWorkers == 1 {
-		return ds.downloadAlbumsSequentially(ctx, albums, cfg, debug, format, bitrate)
-	}
-	
-	return ds.downloadAlbumsParallel(ctx, albums, cfg, debug, format, bitrate, maxWorkers)
-}
+
 
 func (ds *DownloadService) downloadTracksWithParallelism(ctx context.Context, tracks []shared.Track, album *shared.Album, coverData []byte, cfg *config.Config, debug bool, format string, bitrate string) (*shared.DownloadStats, error) {
 	stats := &shared.DownloadStats{}
@@ -407,68 +839,9 @@ func (ds *DownloadService) matchesFilter(filter, albumType string) bool {
 // 4.4 Parallel Processing Methods
 // ============================================================================
 
-func (ds *DownloadService) downloadAlbumsSequentially(ctx context.Context, albums []shared.Album, cfg *config.Config, debug bool, format string, bitrate string) *shared.DownloadStats {
-	totalStats := &shared.DownloadStats{}
-	
-	for _, album := range albums {
-		albumStats, err := ds.DownloadAlbum(ctx, album.ID, cfg, debug, format, bitrate)
-		if err != nil {
-			ds.logger.Error("Failed to download album %s: %v", album.Title, err)
-			totalStats.FailedCount++
-			totalStats.FailedItems = append(totalStats.FailedItems, album.Title)
-			continue
-		}
-		
-		ds.mergeStats(totalStats, albumStats)
-	}
-	
-	return totalStats
-}
 
-func (ds *DownloadService) downloadAlbumsParallel(ctx context.Context, albums []shared.Album, cfg *config.Config, debug bool, format string, bitrate string, maxWorkers int) *shared.DownloadStats {
-	totalStats := &shared.DownloadStats{}
-	
-	albumJobs := make(chan shared.Album, len(albums))
-	results := make(chan *shared.DownloadStats, len(albums))
-	
-	// Start worker goroutines
-	for i := 0; i < maxWorkers; i++ {
-		go ds.albumWorker(ctx, i, albumJobs, results, cfg, debug, format, bitrate)
-	}
-	
-	// Send jobs
-	for _, album := range albums {
-		albumJobs <- album
-	}
-	close(albumJobs)
-	
-	// Collect results
-	for i := 0; i < len(albums); i++ {
-		albumStats := <-results
-		ds.mergeStats(totalStats, albumStats)
-	}
-	
-	return totalStats
-}
 
-func (ds *DownloadService) albumWorker(ctx context.Context, workerID int, jobs <-chan shared.Album, results chan<- *shared.DownloadStats, cfg *config.Config, debug bool, format string, bitrate string) {
-	for album := range jobs {
-		if debug {
-			ds.logger.Debug("Worker %d: Starting download for album %s by %s", workerID, album.Title, album.Artist)
-		}
-		
-		albumStats, err := ds.DownloadAlbum(ctx, album.ID, cfg, debug, format, bitrate)
-		if err != nil {
-			ds.logger.Error("Worker %d: Failed to download album %s: %v", workerID, album.Title, err)
-			albumStats = &shared.DownloadStats{
-				FailedCount: 1,
-				FailedItems: []string{album.Title},
-			}
-		}
-		
-		results <- albumStats
-	}
-}
+
 
 func (ds *DownloadService) downloadTracksSequentially(ctx context.Context, tracks []shared.Track, album *shared.Album, coverData []byte, cfg *config.Config, debug bool, format string, bitrate string, stats *shared.DownloadStats) {
 	for _, track := range tracks {
