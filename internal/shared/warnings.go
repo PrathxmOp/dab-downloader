@@ -1,4 +1,4 @@
-package main
+package shared
 
 import (
 	"fmt"
@@ -135,8 +135,8 @@ func (wc *WarningCollector) PrintSummary() {
 		return
 	}
 
-	colorWarning.Printf("\n⚠️  Warning Summary (%d warnings):\n", len(wc.warnings))
-	colorWarning.Println(strings.Repeat("─", 50))
+	ColorWarning.Printf("\n⚠️  Warning Summary (%d warnings):\n", len(wc.warnings))
+	ColorWarning.Println(strings.Repeat("─", 50))
 
 	grouped := wc.GetWarningsByType()
 	
@@ -161,7 +161,7 @@ func (wc *WarningCollector) printWarningTypeSection(warningType WarningType, war
 
 	// Print section header
 	sectionTitle := wc.getWarningTypeTitle(warningType)
-	colorWarning.Printf("\n%s (%d):\n", sectionTitle, len(warnings))
+	ColorWarning.Printf("\n%s (%d):\n", sectionTitle, len(warnings))
 
 	// Group similar warnings to avoid repetition
 	contextCounts := make(map[string]int)
@@ -180,9 +180,9 @@ func (wc *WarningCollector) printWarningTypeSection(warningType WarningType, war
 	for _, context := range contexts {
 		count := contextCounts[context]
 		if count > 1 {
-			colorWarning.Printf("  • %s (×%d)\n", context, count)
+			ColorWarning.Printf("  • %s (×%d)\n", context, count)
 		} else {
-			colorWarning.Printf("  • %s\n", context)
+			ColorWarning.Printf("  • %s\n", context)
 		}
 	}
 }

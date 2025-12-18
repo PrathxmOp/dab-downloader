@@ -1,4 +1,4 @@
-package main
+package spotify
 
 import (
 	"context"
@@ -10,14 +10,6 @@ import (
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
 	"golang.org/x/oauth2/clientcredentials"
 )
-
-// SpotifyTrack represents a track from Spotify
-type SpotifyTrack struct {
-	Name        string
-	Artist      string
-	AlbumName   string
-	AlbumArtist string
-}
 
 // Authenticate authenticates the client with the spotify api
 func (s *SpotifyClient) Authenticate() error {

@@ -1,0 +1,24 @@
+{
+  "APIURL": "https://dabmusic.xyz",
+  "DownloadLocation": "/Users/graham/Music",
+  "Parallelism": 5,
+  "SpotifyClientID": "",
+  "SpotifyClientSecret": "",
+  "NavidromeURL": "",
+  "NavidromeUsername": "",
+  "NavidromePassword": "",
+  "Format": "flac",
+  "Bitrate": "320",
+  "SaveAlbumArt": false,
+  "DisableUpdateCheck": false,
+  "UpdateRepo": "PrathxmOp/dab-downloader",
+  "naming": {
+    "album_folder_mask": "",
+    "ep_folder_mask": "",
+    "single_folder_mask": "",
+    "file_mask": ""
+  },
+  "VerifyDownloads": true,
+  "MaxRetryAttempts": 3,
+  "WarningBehavior": "summary"
+}

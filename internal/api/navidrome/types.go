@@ -1,11 +1,10 @@
-package main
+package navidrome
 
 import (
 	subsonic "github.com/delucks/go-subsonic"
 )
 
 // NavidromeClient holds the navidrome client and other required fields
-
 type NavidromeClient struct {
 	URL      string
 	Username string
