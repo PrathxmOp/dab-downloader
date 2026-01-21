@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,9 +23,15 @@ type searchItem struct {
 	desc        string
 	originalItem interface{} // Store the original Artist, Album, or Track object
 	itemType    string      // "artist", "album", or "track"
+	selected    bool
 }
 
-func (i searchItem) Title() string       { return i.title }
+func (i searchItem) Title() string {
+	if i.selected {
+		return "[x] " + i.title
+	}
+	return "[ ] " + i.title
+}
 func (i searchItem) Description() string { return i.desc }
 func (i searchItem) FilterValue() string { return i.title }
 
@@ -34,9 +39,8 @@ type model struct {
 	list          list.Model
 	selectedItems []interface{}
 	itemTypes     []string
-	choice        *searchItem
 	quitting      bool
-	err           error
+	multiSelect   bool // Track if user has engaged in multi-selection
 }
 
 func (m model) Init() tea.Cmd {
@@ -55,12 +59,41 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 
+		case " ": // Space to toggle selection
+			idx := m.list.Index()
+			if idx >= 0 && idx < len(m.list.Items()) {
+				item := m.list.Items()[idx].(searchItem)
+				item.selected = !item.selected
+				m.list.SetItem(idx, item)
+				m.multiSelect = true
+			}
+			return m, nil
+
 		case "enter":
-			i, ok := m.list.SelectedItem().(searchItem)
-			if ok {
-				m.choice = &i
-				m.selectedItems = append(m.selectedItems, i.originalItem)
-				m.itemTypes = append(m.itemTypes, i.itemType)
+			// If user used multi-select (space), collect all selected items
+			if m.multiSelect {
+				for _, it := range m.list.Items() {
+					item := it.(searchItem)
+					if item.selected {
+						m.selectedItems = append(m.selectedItems, item.originalItem)
+						m.itemTypes = append(m.itemTypes, item.itemType)
+					}
+				}
+				// If nothing was selected despite toggling (e.g. unselected everything), fallback to current
+				if len(m.selectedItems) == 0 {
+					i, ok := m.list.SelectedItem().(searchItem)
+					if ok {
+						m.selectedItems = append(m.selectedItems, i.originalItem)
+						m.itemTypes = append(m.itemTypes, i.itemType)
+					}
+				}
+			} else {
+				// Single selection mode
+				i, ok := m.list.SelectedItem().(searchItem)
+				if ok {
+					m.selectedItems = append(m.selectedItems, i.originalItem)
+					m.itemTypes = append(m.itemTypes, i.itemType)
+				}
 			}
 			return m, tea.Quit
 		}
@@ -72,9 +105,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	if m.choice != nil {
-		return quitTextStyle.Render(fmt.Sprintf("Downloading %s...", m.choice.title))
-	}
 	if m.quitting {
 		return quitTextStyle.Render("Search cancelled.")
 	}
@@ -142,7 +172,7 @@ func handleSearch(ctx context.Context, api *DabAPI, query string, searchType str
 	const listHeight = 14
 
 	l := list.New(items, list.NewDefaultDelegate(), defaultWidth, listHeight)
-	l.Title = "Search Results"
+	l.Title = "Search Results (Space to select, Enter to confirm)"
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
 	l.Styles.Title = titleStyle
@@ -151,15 +181,6 @@ func handleSearch(ctx context.Context, api *DabAPI, query string, searchType str
 
 	m := model{list: l}
 
-	if _, err := tea.NewProgram(m).Run(); err != nil {
-		fmt.Println("Error running program:", err)
-		os.Exit(1)
-	}
-
-	// Because we run the program and it updates the model copy (value receiver in Update if not pointer),
-	// wait, tea.NewProgram returns the *final* model.
-	// We need to capture the return value.
-	
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
 	if err != nil {
@@ -171,7 +192,7 @@ func handleSearch(ctx context.Context, api *DabAPI, query string, searchType str
 		return nil, nil, fmt.Errorf("could not cast model")
 	}
 
-	if finalM.quitting && finalM.choice == nil {
+	if finalM.quitting {
 		return nil, nil, nil // User quit
 	}
 
