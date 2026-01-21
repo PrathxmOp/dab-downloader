@@ -68,9 +68,10 @@ func (api *DabAPI) DownloadTrack(ctx context.Context, track Track, album *Album,
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
-		defer out.Close()
 
 		bytesWritten, err := io.Copy(out, audioResp.Body)
+		out.Close() // Explicitly close after copying
+
 		if err != nil {
 			// Clean up the file on error to prevent partial files
 			os.Remove(outputPath)
@@ -199,12 +200,23 @@ func (api *DabAPI) DownloadSingleTrack(ctx context.Context, track Track, debug b
 	trackFileName := GetTrackFilename(albumTrack.TrackNumber, albumTrack.Title)
 	trackPath := filepath.Join(albumDir, trackFileName)
 
-	// Skip if already exists
-	if FileExists(trackPath) {
+	// Format-aware duplicate detection
+	targetPath := trackPath
+	if format != "flac" {
+		targetPath = strings.TrimSuffix(trackPath, ".flac") + "." + format
+	}
+
+	// Skip if already exists (check both original FLAC and target format)
+	if FileExists(targetPath) || (format != "flac" && FileExists(trackPath)) {
+		existingPath := targetPath
+		if !FileExists(targetPath) {
+			existingPath = trackPath
+		}
+		
 		if config.WarningBehavior == "immediate" {
-			colorWarning.Printf("⭐ Track already exists: %s\n", trackPath)
+			colorWarning.Printf("⭐ Track already exists: %s\n", existingPath)
 		} else {
-			warningCollector.AddTrackSkippedWarning(trackPath)
+			warningCollector.AddTrackSkippedWarning(existingPath)
 		}
 		return nil
 	}
@@ -353,12 +365,23 @@ func (api *DabAPI) DownloadAlbum(ctx context.Context, albumID string, config *Co
 			trackFileName := fmt.Sprintf("%02d - %s.flac", trackNumber, SanitizeFileName(track.Title))
 			trackPath := filepath.Join(albumDir, trackFileName)
 
+			// Format-aware duplicate detection
+			targetPath := trackPath
+			if config.Format != "flac" {
+				targetPath = strings.TrimSuffix(trackPath, ".flac") + "." + config.Format
+			}
+
 			// Skip if already exists
-			if FileExists(trackPath) {
+			if FileExists(targetPath) || (config.Format != "flac" && FileExists(trackPath)) {
+				existingPath := targetPath
+				if !FileExists(targetPath) {
+					existingPath = trackPath
+				}
+
 				if config.WarningBehavior == "immediate" {
-					colorWarning.Printf("⭐ Track already exists: %s\n", trackPath)
+					colorWarning.Printf("⭐ Track already exists: %s\n", existingPath)
 				} else {
-					warningCollector.AddTrackSkippedWarning(trackPath)
+					warningCollector.AddTrackSkippedWarning(existingPath)
 				}
 				stats.SkippedCount++
 				return
