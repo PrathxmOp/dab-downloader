@@ -20,6 +20,7 @@ require (
 	github.com/delucks/go-subsonic v0.0.0-20240806025900-2a743ec36238
 	github.com/hashicorp/go-version v1.7.0
 	github.com/mattn/go-isatty v0.0.20
+	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 )
 
 require (

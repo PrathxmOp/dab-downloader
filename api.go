@@ -1,12 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,12 +24,19 @@ const requestInterval = 500 * time.Millisecond // Define rate limit interval
 
 // NewDabAPI creates a new API client
 func NewDabAPI(endpoint, outputLocation string, client *http.Client) *DabAPI {
-	return &DabAPI{
+	if client.Jar == nil {
+		jar, _ := cookiejar.New(nil)
+		client.Jar = jar
+	}
+
+	api := &DabAPI{
 		endpoint:       strings.TrimSuffix(endpoint, "/"),
 		outputLocation: outputLocation,
 		client:         client,
 		rateLimiter:    time.NewTicker(requestInterval), // Initialize rate limiter
 	}
+	api.LoadCookies()
+	return api
 }
 
 type DabAPI struct {
@@ -91,6 +103,111 @@ func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, pa
 	}
 
 	return resp, nil
+}
+
+func (api *DabAPI) LoadCookies() (bool, error) {
+	tokenPath := filepath.Join("config", ".token")
+	if _, err := os.Stat(tokenPath); errors.Is(err, os.ErrNotExist) {
+		// Fallback to current directory for backward compatibility or if config dir structure is different
+		tokenPath = ".token"
+		if _, err := os.Stat(tokenPath); errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+	}
+
+	dat, err := os.ReadFile(tokenPath)
+	if err != nil {
+		return false, fmt.Errorf("unable to read .token file")
+	}
+
+	u, _ := url.Parse(api.endpoint)
+	api.client.Jar.SetCookies(u, []*http.Cookie{
+		{
+			Name:  "session",
+			Value: string(dat),
+		},
+	})
+
+	return true, nil
+}
+
+func (api *DabAPI) Login(email string, password string) error {
+	if email == "" || password == "" {
+		return fmt.Errorf("invalid email or password")
+	}
+
+	body := struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}{
+		Email:    email,
+		Password: password,
+	}
+
+	out, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("cannot encode login body")
+	}
+
+	req, err := http.NewRequest("POST",
+		fmt.Sprintf("%s/%s", api.endpoint, "api/auth/login"),
+		bytes.NewBuffer(out),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgent)
+
+	res, err := api.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error while making request: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode == 401 {
+		return fmt.Errorf("invalid credentials")
+	}
+
+	if res.StatusCode == 200 {
+		var token = ""
+		for _, cook := range res.Cookies() {
+			if cook.Name == "session" {
+				token = cook.Value
+			}
+		}
+
+		if token == "" {
+			// Try to find it in the jar if not in response (though it should be in response)
+			u, _ := url.Parse(api.endpoint)
+			for _, cook := range api.client.Jar.Cookies(u) {
+				if cook.Name == "session" {
+					token = cook.Value
+				}
+			}
+		}
+
+		if token == "" {
+			return fmt.Errorf("unable to get token")
+		}
+
+		// Ensure config directory exists
+		if _, err := os.Stat("config"); os.IsNotExist(err) {
+			os.Mkdir("config", 0755)
+		}
+
+		tokenPath := filepath.Join("config", ".token")
+		err := os.WriteFile(tokenPath, []byte(token), 0644)
+		if err != nil {
+			return fmt.Errorf("unable to write .token file: %w", err)
+		}
+
+		// Cookie is already in the jar because client.Do handles it
+	} else {
+		return fmt.Errorf("login failed with status: %s", res.Status)
+	}
+
+	return nil
 }
 
 // GetAlbum retrieves album information

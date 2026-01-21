@@ -53,6 +53,25 @@ var rootCmd = &cobra.Command{
 	Short:   "A high-quality FLAC music downloader for the DAB API.",
 }
 
+var loginCmd = &cobra.Command{
+	Use:   "login [email] [password]",
+	Short: "Login to DAB API",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		_, api := initConfigAndAPI()
+		
+		email := args[0]
+		password := args[1]
+		
+		colorInfo.Println("🔐 Attempting to login...")
+		if err := api.Login(email, password); err != nil {
+			colorError.Printf("❌ Login failed: %v\n", err)
+			os.Exit(1)
+		}
+		colorSuccess.Println("✅ Login successful!")
+	},
+}
+
 var artistCmd = &cobra.Command{
 	Use:   "artist [artist_id]",
 	Short: "Download an artist's entire discography.",
@@ -772,6 +791,7 @@ func init() {
 	rootCmd.AddCommand(spotifyCmd)
 	rootCmd.AddCommand(navidromeCmd)
 	rootCmd.AddCommand(addToPlaylistCmd)
+	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(debugCmd)
 
 	debugCmd.AddCommand(testApiAvailabilityCmd)
