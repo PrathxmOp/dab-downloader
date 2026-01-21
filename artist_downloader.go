@@ -14,7 +14,7 @@ import (
 )
 
 // DownloadArtistDiscography downloads an artist's complete discography
-func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID string, config *Config, debug bool, filter string, noConfirm bool) error {
+func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID string, config *Config, debug bool, filter string, noConfirm bool, pool *pb.Pool) error {
 	// Create warning collector based on config
 	warningCollector := NewWarningCollector(config.WarningBehavior != "silent")
 	
@@ -132,15 +132,18 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 	sem := semaphore.NewWeighted(int64(config.Parallelism))
 	stats := &DownloadStats{}
 	errorChan := make(chan trackError, len(itemsToDownload))
-	var pool *pb.Pool
-	if isTTY() {
+	
+	var localPool bool
+	if pool == nil && isTTY() {
 		var poolErr error
 		pool, poolErr = pb.StartPool()
 		if poolErr != nil {
 			colorError.Printf("❌ Failed to start progress bar pool: %v\n", poolErr)
 			// Continue without the pool
+		} else {
+			localPool = true
 		}
-	} else {
+	} else if !isTTY() {
 		if debug {
 			colorInfo.Println("DEBUG: isTTY() is false. Progress bars will not be displayed.")
 		}
@@ -175,7 +178,7 @@ func (api *DabAPI) DownloadArtistDiscography(ctx context.Context, artistID strin
 
 	// Wait for all downloads to finish
 	wg.Wait()
-	if pool != nil {
+	if localPool && pool != nil {
 		pool.Stop()
 	}
 	close(errorChan)

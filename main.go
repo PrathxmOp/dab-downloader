@@ -113,7 +113,7 @@ var artistCmd = &cobra.Command{
 			}
 			artistID := args[0]
 			colorInfo.Println("🎵 Starting artist discography download for ID:", artistID)
-			if err := api.DownloadArtistDiscography(context.Background(), artistID, config, debug, filter, noConfirm); err != nil {
+			if err := api.DownloadArtistDiscography(context.Background(), artistID, config, debug, filter, noConfirm, nil); err != nil {
 				if errors.Is(err, ErrDownloadCancelled) {
 					colorWarning.Println("⚠️ Discography download cancelled by user.")
 				} else if errors.Is(err, ErrNoItemsSelected) {
@@ -168,6 +168,8 @@ var searchCmd = &cobra.Command{
 				return
 			}
 
+			// Give the terminal a moment to settle after Bubble Tea (fixes 'terminal locked' error)
+			time.Sleep(100 * time.Millisecond)
 
 			// Initialize pool for multiple track downloads
 			var pool *pb.Pool
@@ -193,7 +195,7 @@ var searchCmd = &cobra.Command{
 					if debug { // Add this debug print
 						colorInfo.Printf("DEBUG - Passing artistIDStr to DownloadArtistDiscography: '%s'\n", artistIDStr)
 					}
-					if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, config, debug, filter, noConfirm); err != nil {
+					if err := api.DownloadArtistDiscography(context.Background(), artistIDStr, config, debug, filter, noConfirm, pool); err != nil {
 						colorError.Printf("❌ Failed to download discography for %s: %v\n", artist.Name, err)
 					} else {
 						colorSuccess.Println("✅ Discography download completed for", artist.Name)
@@ -201,7 +203,7 @@ var searchCmd = &cobra.Command{
 				case "album":
 					album := selectedItem.(Album)
 					colorInfo.Println("🎵 Starting album download for:", album.Title, "by", album.Artist)
-					if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, nil, nil); err != nil {
+					if _, err := api.DownloadAlbum(context.Background(), album.ID, config, debug, pool, nil); err != nil {
 						colorError.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
 					} else {
 						colorSuccess.Println("✅ Album download completed for", album.Title)
@@ -294,6 +296,9 @@ uniqueAlbums[albumKey] = track
 						continue
 					}
 
+					// Give the terminal a moment to settle after Bubble Tea
+					time.Sleep(500 * time.Millisecond)
+
 					// Download the first result (or the one selected by the user)
 					for i, selectedItem := range selectedItems {
 						if itemTypes[i] == "album" {
@@ -346,6 +351,9 @@ uniqueAlbums[albumKey] = track
 					colorWarning.Printf("⚠️ No results found for track: %s\n", trackName)
 					continue
 				}
+
+				// Give the terminal a moment to settle after Bubble Tea
+				time.Sleep(500 * time.Millisecond)
 
 				for i, selectedItem := range selectedItems {
 					itemType := itemTypes[i]
@@ -445,6 +453,9 @@ var navidromeCmd = &cobra.Command{
 							continue
 						}
 		
+						// Give the terminal a moment to settle after Bubble Tea
+						time.Sleep(100 * time.Millisecond)
+
 						// Download the first result (or the one selected by the user)
 						for i, selectedItem := range selectedItems {
 							if itemTypes[i] == "album" {
@@ -503,11 +514,13 @@ var navidromeCmd = &cobra.Command{
 					continue
 				}
 
-				if len(dabSearchResults) > 0 {
-					// Assuming the first result is the desired one if auto is true, or user selected one
-					selectedDabItem := dabSearchResults[0]
-					selectedDabItemType := dabItemTypes[0]
-
+				                if len(dabSearchResults) > 0 {
+				                    // Give the terminal a moment to settle after Bubble Tea
+				                    time.Sleep(500 * time.Millisecond)
+				
+				                    					// Assuming the first result is the desired one if auto is true, or user selected one
+				                    					selectedDabItem := dabSearchResults[0]
+				                    					selectedDabItemType := dabItemTypes[0]
 					if selectedDabItemType == "track" {
 						dabTrack := selectedDabItem.(Track)
 					colorInfo.Printf("🎵 Downloading %s by %s from DAB...\n", dabTrack.Title, dabTrack.Artist)
