@@ -72,6 +72,35 @@ var loginCmd = &cobra.Command{
 	},
 }
 
+var logoutCmd = &cobra.Command{
+	Use:   "logout",
+	Short: "Logout from DAB API",
+	Run: func(cmd *cobra.Command, args []string) {
+		_, api := initConfigAndAPI()
+		
+		if err := api.Logout(); err != nil {
+			colorError.Printf("❌ Logout failed: %v\n", err)
+			os.Exit(1)
+		}
+		colorSuccess.Println("✅ Logout successful! Session token removed.")
+	},
+}
+
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Check login status",
+	Run: func(cmd *cobra.Command, args []string) {
+		_, api := initConfigAndAPI()
+		
+		status := api.GetLoginStatus()
+		if status.IsLoggedIn {
+			colorSuccess.Println("✅ " + status.Message)
+		} else {
+			colorWarning.Println("⚠️ " + status.Message)
+		}
+	},
+}
+
 var artistCmd = &cobra.Command{
 	Use:   "artist [artist_id]",
 	Short: "Download an artist's entire discography.",
@@ -792,6 +821,8 @@ func init() {
 	rootCmd.AddCommand(navidromeCmd)
 	rootCmd.AddCommand(addToPlaylistCmd)
 	rootCmd.AddCommand(loginCmd)
+	rootCmd.AddCommand(logoutCmd)
+	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(debugCmd)
 
 	debugCmd.AddCommand(testApiAvailabilityCmd)

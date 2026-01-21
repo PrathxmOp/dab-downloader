@@ -91,6 +91,12 @@ func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, pa
 			resp.Body.Close()
 			return fmt.Errorf("rate limit exceeded (429), retrying") // Return error to trigger retry
 		}
+		if resp.StatusCode == http.StatusUnauthorized {
+			resp.Body.Close()
+			// Clear token on 401
+			api.Logout()
+			return fmt.Errorf("unauthorized (401): your session has expired or is invalid. Please login again using 'dab-downloader login'")
+		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
 			return fmt.Errorf("request failed with status: %s", resp.Status)
@@ -103,6 +109,54 @@ func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, pa
 	}
 
 	return resp, nil
+}
+
+func (api *DabAPI) Logout() error {
+	// 1. Clear cookie jar
+	api.client.Jar, _ = cookiejar.New(nil)
+
+	// 2. Remove token file
+	tokenPath := filepath.Join("config", ".token")
+	if _, err := os.Stat(tokenPath); err == nil {
+		if err := os.Remove(tokenPath); err != nil {
+			return fmt.Errorf("failed to remove token file: %w", err)
+		}
+	}
+
+	// 3. Remove legacy token file if it exists
+	legacyTokenPath := ".token"
+	if _, err := os.Stat(legacyTokenPath); err == nil {
+		os.Remove(legacyTokenPath)
+	}
+
+	return nil
+}
+
+// LoginStatus represents the current login status
+type LoginStatus struct {
+	IsLoggedIn bool
+	Message    string
+}
+
+// GetLoginStatus checks if the user is currently logged in
+func (api *DabAPI) GetLoginStatus() LoginStatus {
+	// Check if token file exists
+	tokenPath := filepath.Join("config", ".token")
+	if _, err := os.Stat(tokenPath); errors.Is(err, os.ErrNotExist) {
+		// Check legacy path
+		if _, err := os.Stat(".token"); errors.Is(err, os.ErrNotExist) {
+			return LoginStatus{IsLoggedIn: false, Message: "No session token found. You are not logged in."}
+		}
+	}
+
+	// Token exists, assume logged in for now.
+	// We could verify by making a lightweight request (e.g., search) but for status check this might be enough
+	// or we can try to verify.
+	// Let's try a very lightweight request to verify validity if possible, or just report true.
+	// Since 401 handling is now in Request, any subsequent command will trigger the logout if invalid.
+	// For 'status' command specifically, we might want to know for sure.
+	
+	return LoginStatus{IsLoggedIn: true, Message: "Session token found. You are logged in."}
 }
 
 func (api *DabAPI) LoadCookies() (bool, error) {
