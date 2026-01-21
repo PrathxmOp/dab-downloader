@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue.svg)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](#license)
 [![Release](https://img.shields.io/github/v/release/PrathxmOp/dab-downloader)](https://github.com/PrathxmOp/dab-downloader/releases/latest)
-[![Discord Support](https://img.shields.io/badge/Support-Discord-blue.svg?logo=discord&logoColor=white)](https://discord.gg/Mj6bSfD2VG)
+[![Discord Support](https://img.shields.io/badge/Support-Discord-blue.svg?logo=discord&logoColor=white)](https://discord.gg/gjf3xjMtRE)
 ![Development Status](https://img.shields.io/badge/status-active%20development-orange.svg)
 
 > **A high-performance, modular music downloader designed for audiophiles.**  
@@ -141,7 +141,7 @@ Override config settings on the fly:
 We welcome contributions! Whether it's reporting bugs, suggesting features, or submitting Pull Requests.
 
 1.  **Report Issues**: Found a bug? Open an issue on GitHub.
-2.  **Join the Community**: Discuss features and get help on our [**Discord Server**](https://discord.gg/q9RnuVza2).
+2.  **Join the Community**: Discuss features and get help on our [**Discord Server**](https://discord.gg/gjf3xjMtRE).
 
 ---
 
