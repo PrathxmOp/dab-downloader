@@ -9,18 +9,17 @@ WORKDIR /app
 # Copy go.mod and go.sum and download dependencies
 COPY go.mod .
 COPY go.sum .
+RUN go mod tidy
+RUN go mod download
 
 # Copy the rest of the application source code
 COPY . .
 
-# Download dependencies and tidy go.mod/go.sum
-RUN go mod tidy
-RUN go mod download
-
 # Build the application
 # CGO_ENABLED=0 is important for static linking, making the binary self-contained
 # -ldflags="-s -w" reduces the binary size by stripping debug information
-RUN CGO_ENABLED=0 go build -o dab-downloader -ldflags="-s -w" .
+# Pointing to the new location of main.go
+RUN CGO_ENABLED=0 go build -o dab-downloader -ldflags="-s -w" ./cmd/dab-downloader
 
 # Stage 2: Create the final lean image
 FROM alpine:latest
@@ -34,8 +33,8 @@ WORKDIR /app
 # Copy the built executable from the builder stage
 COPY --from=builder /app/dab-downloader .
 
-# Copy version.json from the builder stage
-COPY --from=builder /app/version/version.json version/
+# Copy version.json from the builder stage (now in cmd/dab-downloader)
+COPY --from=builder /app/cmd/dab-downloader/version.json cmd/dab-downloader/
 
 # Copy example-config.json to be used as a template
 COPY config/example-config.json config/
