@@ -1,7 +1,7 @@
-package main
+package musicbrainz
 
 import (
-	"context" // Add this import
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
+	"dab-downloader/internal/utils"
 )
 
 const (
@@ -101,7 +102,7 @@ func (mb *MusicBrainzClient) get(path string) ([]byte, error) {
 	// Wait for the rate limiter
 	mb.rateLimiter.Wait(context.Background())
 
-	err = RetryWithBackoffForHTTPWithDebug(
+	err = utils.RetryWithBackoffForHTTPWithDebug(
 		mb.config.MaxRetries,    // maxRetries from client config
 		mb.config.InitialDelay,  // initialDelay from client config
 		mb.config.MaxDelay,      // maxDelay from client config
@@ -117,16 +118,16 @@ func (mb *MusicBrainzClient) get(path string) ([]byte, error) {
 			if err != nil {
 				// Check for network-related errors that are not HTTP errors
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					return &HTTPError{StatusCode: http.StatusGatewayTimeout, Status: "Gateway Timeout", Message: err.Error()}
+					return &utils.HTTPError{StatusCode: http.StatusGatewayTimeout, Status: "Gateway Timeout", Message: err.Error()}
 				}
 				return err // Non-retryable network error or other error
 			}
 
 			// If the status code is retryable, return an HTTPError
-			if IsRetryableHTTPError(&HTTPError{StatusCode: resp.StatusCode}) {
+			if utils.IsRetryableHTTPError(&utils.HTTPError{StatusCode: resp.StatusCode}) {
 				// Close the body of the retryable response to prevent resource leaks
 				resp.Body.Close()
-				return &HTTPError{StatusCode: resp.StatusCode, Status: resp.Status, Message: "Retryable HTTP error"}
+				return &utils.HTTPError{StatusCode: resp.StatusCode, Status: resp.Status, Message: "Retryable HTTP error"}
 			}
 
 			finalResp = resp // Assign the successful response to the outer variable
@@ -148,7 +149,7 @@ func (mb *MusicBrainzClient) get(path string) ([]byte, error) {
 		if len(message) > 200 {
 			message = message[:200] + "..."
 		}
-		return nil, &HTTPError{
+		return nil, &utils.HTTPError{
 			StatusCode: finalResp.StatusCode,
 			Status:     finalResp.Status,
 			Message:    message,
@@ -167,7 +168,7 @@ func (mb *MusicBrainzClient) getWithRetry(path string) ([]byte, error) {
 	var result []byte
 	var err error
 
-	retryErr := RetryWithBackoffForHTTPWithDebug(
+	retryErr := utils.RetryWithBackoffForHTTPWithDebug(
 		mb.config.MaxRetries,
 		mb.config.InitialDelay,
 		mb.config.MaxDelay,
@@ -216,9 +217,28 @@ func (mb *MusicBrainzClient) GetReleaseMetadata(mbid string) (*MusicBrainzReleas
 
 // SearchTrack searches for a track on MusicBrainz
 func (mb *MusicBrainzClient) SearchTrack(artist, album, title string) (*MusicBrainzTrack, error) {
+	// 1. Try strict search
 	query := fmt.Sprintf("artist:\"%s\" AND release:\"%s\" AND recording:\"%s\"", artist, album, title)
 	path := fmt.Sprintf("recording?query=%s&limit=1", url.QueryEscape(query))
 	body, err := mb.getWithRetry(path)
+	if err == nil {
+		var searchResult struct {
+			Recordings []MusicBrainzTrack `json:"recordings"`
+		}
+		if err := json.Unmarshal(body, &searchResult); err == nil && len(searchResult.Recordings) > 0 {
+			return &searchResult.Recordings[0], nil
+		}
+	}
+
+	// 2. Fallback: Loose search
+	query = fmt.Sprintf("artist:(%s) AND release:(%s) AND recording:(%s)", artist, album, title)
+	path = fmt.Sprintf("recording?query=%s&limit=3", url.QueryEscape(query))
+	
+	if mb.debug {
+		fmt.Printf("DEBUG: Trying fallback track search: %s\n", query)
+	}
+	
+	body, err = mb.getWithRetry(path)
 	if err != nil {
 		return nil, err
 	}
@@ -239,9 +259,39 @@ func (mb *MusicBrainzClient) SearchTrack(artist, album, title string) (*MusicBra
 
 // SearchRelease searches for a release on MusicBrainz
 func (mb *MusicBrainzClient) SearchRelease(artist, album string) (*MusicBrainzRelease, error) {
+	// 1. Try strict search first
 	query := fmt.Sprintf("artist:\"%s\" AND release:\"%s\"", artist, album)
 	path := fmt.Sprintf("release?query=%s&limit=1", url.QueryEscape(query))
 	body, err := mb.getWithRetry(path)
+	if err == nil {
+		var searchResult struct {
+			Releases []MusicBrainzRelease `json:"releases"`
+		}
+		if err := json.Unmarshal(body, &searchResult); err == nil && len(searchResult.Releases) > 0 {
+			return &searchResult.Releases[0], nil
+		}
+	}
+
+	// 2. Fallback: Loose search (no quotes, fuzzy matching)
+	// We handle special characters by escaping them slightly or just relying on standard Lucene behavior without quotes
+	// Lucene special chars: + - && || ! ( ) { } [ ] ^ " ~ * ? : \
+	// Ideally we should escape them, but for now let's just try without quotes
+	
+	query = fmt.Sprintf("artist:%s AND release:%s", url.QueryEscape(artist), url.QueryEscape(album))
+	path = fmt.Sprintf("release?query=%s&limit=5", query) // Fetch a few to filter manually if needed
+	// Note: url.QueryEscape escapes spaces to +, which might be okay for query param but inside the Lucene query string passed TO the param?
+	// Actually, we construct the string `artist:Name AND release:Title`
+	// If Name has spaces, `artist:Name Name` is `artist:Name OR default:Name`.
+	// Better fallback: `artist:(Name) AND release:(Title)`
+	
+	query = fmt.Sprintf("artist:(%s) AND release:(%s)", artist, album)
+	path = fmt.Sprintf("release?query=%s&limit=3", url.QueryEscape(query))
+	
+	if mb.debug {
+		fmt.Printf("DEBUG: Trying fallback release search: %s\n", query)
+	}
+
+	body, err = mb.getWithRetry(path)
 	if err != nil {
 		return nil, err
 	}
@@ -254,6 +304,7 @@ func (mb *MusicBrainzClient) SearchRelease(artist, album string) (*MusicBrainzRe
 	}
 
 	if len(searchResult.Releases) > 0 {
+		// Return the best match (first one usually)
 		return &searchResult.Releases[0], nil
 	}
 

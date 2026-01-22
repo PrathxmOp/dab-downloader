@@ -1,4 +1,4 @@
-package main
+package navidrome
 
 import (
 	"crypto/md5"

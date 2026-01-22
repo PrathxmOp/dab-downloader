@@ -1,9 +1,11 @@
-package main
+package utils
 
 import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"dab-downloader/internal/ui"
 )
 
 // WarningType represents different types of warnings
@@ -135,8 +137,8 @@ func (wc *WarningCollector) PrintSummary() {
 		return
 	}
 
-	colorWarning.Printf("\n⚠️  Warning Summary (%d warnings):\n", len(wc.warnings))
-	colorWarning.Println(strings.Repeat("─", 50))
+	ui.Warning.Printf("\n⚠️  Warning Summary (%d warnings):\n", len(wc.warnings))
+	ui.Warning.Println(strings.Repeat("─", 50))
 
 	grouped := wc.GetWarningsByType()
 	
@@ -161,7 +163,7 @@ func (wc *WarningCollector) printWarningTypeSection(warningType WarningType, war
 
 	// Print section header
 	sectionTitle := wc.getWarningTypeTitle(warningType)
-	colorWarning.Printf("\n%s (%d):\n", sectionTitle, len(warnings))
+	ui.Warning.Printf("\n%s (%d):\n", sectionTitle, len(warnings))
 
 	// Group similar warnings to avoid repetition
 	contextCounts := make(map[string]int)
@@ -180,9 +182,9 @@ func (wc *WarningCollector) printWarningTypeSection(warningType WarningType, war
 	for _, context := range contexts {
 		count := contextCounts[context]
 		if count > 1 {
-			colorWarning.Printf("  • %s (×%d)\n", context, count)
+			ui.Warning.Printf("  • %s (×%d)\n", context, count)
 		} else {
-			colorWarning.Printf("  • %s\n", context)
+			ui.Warning.Printf("  • %s\n", context)
 		}
 	}
 }

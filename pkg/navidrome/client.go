@@ -1,4 +1,4 @@
-package main
+package navidrome
 
 import (
 	subsonic "github.com/delucks/go-subsonic"

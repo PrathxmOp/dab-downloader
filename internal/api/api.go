@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"bytes"
@@ -15,12 +15,19 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time" // Add time import
+	"time"
 
 	"golang.org/x/sync/semaphore"
+
+	"dab-downloader/internal/config"
+	"dab-downloader/internal/models"
+	"dab-downloader/internal/utils"
 )
 
 const requestInterval = 500 * time.Millisecond // Define rate limit interval
+const requestTimeout    = 10 * time.Minute
+const userAgent         = "DAB-Downloader/2.0"
+
 
 // NewDabAPI creates a new API client
 func NewDabAPI(endpoint, outputLocation string, client *http.Client) *DabAPI {
@@ -39,16 +46,8 @@ func NewDabAPI(endpoint, outputLocation string, client *http.Client) *DabAPI {
 	return api
 }
 
-type DabAPI struct {
-	endpoint       string
-	outputLocation string
-	client         *http.Client
-	mu             sync.Mutex // Mutex to protect rate limiter
-	rateLimiter    *time.Ticker // Rate limiter for API requests
-}
-
 // Request makes HTTP requests to the API
-func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, params []QueryParam) (*http.Response, error) {
+func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, params []models.QueryParam) (*http.Response, error) {
 	api.mu.Lock()
 	<-api.rateLimiter.C // Wait for the rate limiter
 	api.mu.Unlock()
@@ -75,7 +74,7 @@ func (api *DabAPI) Request(ctx context.Context, path string, isPathOnly bool, pa
 	}
 
 	var resp *http.Response
-	err = RetryWithBackoff(defaultMaxRetries, 1, func() error {
+	err = utils.RetryWithBackoff(config.DefaultMaxRetries, 1, func() error {
 		req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 		if err != nil {
 			return fmt.Errorf("error creating request: %w", err)
@@ -116,7 +115,8 @@ func (api *DabAPI) Logout() error {
 	api.client.Jar, _ = cookiejar.New(nil)
 
 	// 2. Remove token file
-	tokenPath := filepath.Join("config", ".token")
+
+tokenPath := filepath.Join("config", ".token")
 	if _, err := os.Stat(tokenPath); err == nil {
 		if err := os.Remove(tokenPath); err != nil {
 			return fmt.Errorf("failed to remove token file: %w", err)
@@ -124,6 +124,7 @@ func (api *DabAPI) Logout() error {
 	}
 
 	// 3. Remove legacy token file if it exists
+
 	legacyTokenPath := ".token"
 	if _, err := os.Stat(legacyTokenPath); err == nil {
 		os.Remove(legacyTokenPath)
@@ -141,7 +142,8 @@ type LoginStatus struct {
 // GetLoginStatus checks if the user is currently logged in
 func (api *DabAPI) GetLoginStatus() LoginStatus {
 	// Check if token file exists
-	tokenPath := filepath.Join("config", ".token")
+
+tokenPath := filepath.Join("config", ".token")
 	if _, err := os.Stat(tokenPath); errors.Is(err, os.ErrNotExist) {
 		// Check legacy path
 		if _, err := os.Stat(".token"); errors.Is(err, os.ErrNotExist) {
@@ -149,18 +151,12 @@ func (api *DabAPI) GetLoginStatus() LoginStatus {
 		}
 	}
 
-	// Token exists, assume logged in for now.
-	// We could verify by making a lightweight request (e.g., search) but for status check this might be enough
-	// or we can try to verify.
-	// Let's try a very lightweight request to verify validity if possible, or just report true.
-	// Since 401 handling is now in Request, any subsequent command will trigger the logout if invalid.
-	// For 'status' command specifically, we might want to know for sure.
-	
 	return LoginStatus{IsLoggedIn: true, Message: "Session token found. You are logged in."}
 }
 
 func (api *DabAPI) LoadCookies() (bool, error) {
-	tokenPath := filepath.Join("config", ".token")
+
+tokenPath := filepath.Join("config", ".token")
 	if _, err := os.Stat(tokenPath); errors.Is(err, os.ErrNotExist) {
 		// Fallback to current directory for backward compatibility or if config dir structure is different
 		tokenPath = ".token"
@@ -265,8 +261,8 @@ func (api *DabAPI) Login(email string, password string) error {
 }
 
 // GetAlbum retrieves album information
-func (api *DabAPI) GetAlbum(ctx context.Context, albumID string) (*Album, error) {
-	resp, err := api.Request(ctx, "api/album", true, []QueryParam{
+func (api *DabAPI) GetAlbum(ctx context.Context, albumID string) (*models.Album, error) {
+	resp, err := api.Request(ctx, "api/album", true, []models.QueryParam{
 		{Name: "albumId", Value: albumID},
 	})
 	if err != nil {
@@ -274,7 +270,7 @@ func (api *DabAPI) GetAlbum(ctx context.Context, albumID string) (*Album, error)
 	}
 	defer resp.Body.Close()
 
-	var albumResp AlbumResponse
+	var albumResp models.AlbumResponse
 	if err := json.NewDecoder(resp.Body).Decode(&albumResp); err != nil {
 		return nil, fmt.Errorf("failed to decode album response: %w", err)
 	}
@@ -329,12 +325,12 @@ func (api *DabAPI) GetAlbum(ctx context.Context, albumID string) (*Album, error)
 }
 
 // GetArtist retrieves artist information and discography
-func (api *DabAPI) GetArtist(ctx context.Context, artistID string, config *Config, debug bool) (*Artist, error) {
+func (api *DabAPI) GetArtist(ctx context.Context, artistID string, conf *config.Config, debug bool) (*models.Artist, error) {
 	if debug {
 		fmt.Printf("DEBUG - GetArtist called with artistID: '%s'\n", artistID)
 	}
 
-	resp, err := api.Request(ctx, "api/discography", true, []QueryParam{
+	resp, err := api.Request(ctx, "api/discography", true, []models.QueryParam{
 		{Name: "artistId", Value: artistID},
 	})
 	if err != nil {
@@ -361,8 +357,8 @@ func (api *DabAPI) GetArtist(ctx context.Context, artistID string, config *Confi
 
 	// The discography endpoint returns a different structure
 	var discographyResp struct {
-		Artist Artist  `json:"artist"`
-		Albums []Album `json:"albums"`
+		Artist models.Artist  `json:"artist"`
+		Albums []models.Album `json:"albums"`
 	}
 
 	if err := json.Unmarshal(body, &discographyResp); err != nil {
@@ -388,26 +384,26 @@ func (api *DabAPI) GetArtist(ctx context.Context, artistID string, config *Confi
 	}
 
 	// Process albums to ensure proper categorization
-	colorInfo.Println("🔍 Fetching detailed album information...")
+	fmt.Println("🔍 Fetching detailed album information...")
 
 	var wg sync.WaitGroup
-	sem := semaphore.NewWeighted(int64(config.Parallelism)) // Use configured parallelism for fetching
+	sem := semaphore.NewWeighted(int64(conf.Parallelism)) // Use configured parallelism for fetching
 
 	for i := range artist.Albums {
 		wg.Add(1)
 		album := &artist.Albums[i] // Capture album for goroutine
 
-		go func(album *Album) {
+		go func(album *models.Album) {
 			defer wg.Done()
 			if err := sem.Acquire(ctx, 1); err != nil {
-				colorError.Printf("Failed to acquire semaphore for album %s: %v\n", album.Title, err)
+				fmt.Printf("Failed to acquire semaphore for album %s: %v\n", album.Title, err)
 				return
 			}
 			defer sem.Release(1)
 
 			// If album type is not provided by the discography endpoint, fetch full album details
 			if album.Type == "" || len(album.Tracks) == 0 {
-				colorInfo.Printf("  Fetching details for album: %s (ID: %s)\n", album.Title, album.ID)
+				fmt.Printf("  Fetching details for album: %s (ID: %s)\n", album.Title, album.ID)
 				if debug {
 					fmt.Printf("DEBUG - Fetching full album details for album ID: %s, Title: %s\n", album.ID, album.Title)
 				}
@@ -456,8 +452,8 @@ func (api *DabAPI) GetArtist(ctx context.Context, artistID string, config *Confi
 }
 
 // GetTrack retrieves track information
-func (api *DabAPI) GetTrack(ctx context.Context, trackID string) (*Track, error) {
-	resp, err := api.Request(ctx, "api/track", true, []QueryParam{
+func (api *DabAPI) GetTrack(ctx context.Context, trackID string) (*models.Track, error) {
+	resp, err := api.Request(ctx, "api/track", true, []models.QueryParam{
 		{Name: "trackId", Value: trackID},
 	})
 	if err != nil {
@@ -465,7 +461,7 @@ func (api *DabAPI) GetTrack(ctx context.Context, trackID string) (*Track, error)
 	}
 	defer resp.Body.Close()
 
-	var trackResp TrackResponse
+	var trackResp models.TrackResponse
 	if err := json.NewDecoder(resp.Body).Decode(&trackResp); err != nil {
 		return nil, fmt.Errorf("failed to decode track response: %w", err)
 	}
@@ -487,9 +483,9 @@ func (api *DabAPI) GetTrack(ctx context.Context, trackID string) (*Track, error)
 
 // GetStreamURL retrieves the stream URL for a track
 func (api *DabAPI) GetStreamURL(ctx context.Context, trackID string) (string, error) {
-	var streamURL StreamURL
-	err := RetryWithBackoff(defaultMaxRetries, 1, func() error {
-		resp, err := api.Request(ctx, "api/stream", true, []QueryParam{
+	var streamURL models.StreamURL
+	err := utils.RetryWithBackoff(config.DefaultMaxRetries, 1, func() error {
+		resp, err := api.Request(ctx, "api/stream", true, []models.QueryParam{
 			{Name: "trackId", Value: trackID},
 			{Name: "quality", Value: "27"}, // Highest quality FLAC
 		})
@@ -513,7 +509,7 @@ func (api *DabAPI) GetStreamURL(ctx context.Context, trackID string) (string, er
 // DownloadCover downloads cover art
 func (api *DabAPI) DownloadCover(ctx context.Context, coverURL string) ([]byte, error) {
 	var coverData []byte
-	err := RetryWithBackoff(defaultMaxRetries, 1, func() error {
+	err := utils.RetryWithBackoff(config.DefaultMaxRetries, 1, func() error {
 		resp, err := api.Request(ctx, coverURL, false, nil)
 		if err != nil {
 			return err
@@ -526,10 +522,9 @@ func (api *DabAPI) DownloadCover(ctx context.Context, coverURL string) ([]byte, 
 	return coverData, err
 }
 
-
 // Search searches for artists, albums, or tracks.
-func (api *DabAPI) Search(ctx context.Context, query string, searchType string, limit int, debug bool) (*SearchResults, error) {
-	results := &SearchResults{}
+func (api *DabAPI) Search(ctx context.Context, query string, searchType string, limit int, debug bool) (*models.SearchResults, error) {
+	results := &models.SearchResults{}
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	errChan := make(chan error, 3)
@@ -545,7 +540,7 @@ func (api *DabAPI) Search(ctx context.Context, query string, searchType string, 
 		wg.Add(1)
 		go func(t string) {
 			defer wg.Done()
-			params := []QueryParam{
+			params := []models.QueryParam{
 				{Name: "q", Value: query},
 				{Name: "type", Value: t},
 				{Name: "limit", Value: strconv.Itoa(limit)},
@@ -583,14 +578,14 @@ func (api *DabAPI) Search(ctx context.Context, query string, searchType string, 
 						errChan <- err
 					}
 				} else if res, ok := data["tracks"]; ok {
-					var tempTracks []Track
+					var tempTracks []models.Track
 					if err := json.Unmarshal(res, &tempTracks); err != nil {
 						errChan <- err
 						return
 					}
-					uniqueArtists := make(map[string]Artist)
+					uniqueArtists := make(map[string]models.Artist)
 					for _, track := range tempTracks {
-						artist := Artist{
+						artist := models.Artist{
 							ID:   track.ArtistId,
 							Name: track.Artist,
 						}

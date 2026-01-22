@@ -1,16 +1,20 @@
-package main
+package ffmpeg
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
-	"github.com/go-flac/go-flac"
 	"github.com/go-flac/flacpicture"
 	"github.com/go-flac/flacvorbis"
-	
+	"github.com/go-flac/go-flac"
+
+	"dab-downloader/internal/models"
+	"dab-downloader/internal/utils"
+	"dab-downloader/pkg/musicbrainz"
 )
 
-var mbClient = NewMusicBrainzClientWithDebug(false) // Global instance of MusicBrainzClient
+var mbClient = musicbrainz.NewMusicBrainzClientWithDebug(false) // Global instance of MusicBrainzClient
 
 // SetMusicBrainzDebug sets debug mode for the global MusicBrainz client
 func SetMusicBrainzDebug(debug bool) {
@@ -19,13 +23,13 @@ func SetMusicBrainzDebug(debug bool) {
 
 // AlbumMetadataCache holds cached MusicBrainz release metadata for albums
 type AlbumMetadataCache struct {
-	releases map[string]*MusicBrainzRelease // key: "artist|album"
+	releases map[string]*musicbrainz.MusicBrainzRelease // key: "artist|album"
 	mu       sync.RWMutex
 }
 
 // Global cache instance
 var albumCache = &AlbumMetadataCache{
-	releases: make(map[string]*MusicBrainzRelease),
+	releases: make(map[string]*musicbrainz.MusicBrainzRelease),
 }
 
 // getCacheKey generates a cache key for an album
@@ -34,14 +38,14 @@ func getCacheKey(artist, album string) string {
 }
 
 // GetCachedRelease retrieves cached release metadata
-func (cache *AlbumMetadataCache) GetCachedRelease(artist, album string) *MusicBrainzRelease {
+func (cache *AlbumMetadataCache) GetCachedRelease(artist, album string) *musicbrainz.MusicBrainzRelease {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
 	return cache.releases[getCacheKey(artist, album)]
 }
 
 // SetCachedRelease stores release metadata in cache
-func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release *MusicBrainzRelease) {
+func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release *musicbrainz.MusicBrainzRelease) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	cache.releases[getCacheKey(artist, album)] = release
@@ -51,16 +55,16 @@ func (cache *AlbumMetadataCache) SetCachedRelease(artist, album string, release 
 func (cache *AlbumMetadataCache) ClearCache() {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	cache.releases = make(map[string]*MusicBrainzRelease)
+	cache.releases = make(map[string]*musicbrainz.MusicBrainzRelease)
 }
 
 // AddMetadata adds comprehensive metadata to a FLAC file
-func AddMetadata(filePath string, track Track, album *Album, coverData []byte, totalTracks int, warningCollector *WarningCollector) error {
+func AddMetadata(filePath string, track models.Track, album *models.Album, coverData []byte, totalTracks int, warningCollector *utils.WarningCollector) error {
 	return AddMetadataWithDebug(filePath, track, album, coverData, totalTracks, warningCollector, false)
 }
 
 // AddMetadataWithDebug adds comprehensive metadata to a FLAC file with debug mode support
-func AddMetadataWithDebug(filePath string, track Track, album *Album, coverData []byte, totalTracks int, warningCollector *WarningCollector, debug bool) error {
+func AddMetadataWithDebug(filePath string, track models.Track, album *models.Album, coverData []byte, totalTracks int, warningCollector *utils.WarningCollector, debug bool) error {
 	// Set debug mode for MusicBrainz client
 	mbClient.SetDebug(debug)
 	// Open the FLAC file
@@ -213,7 +217,7 @@ func addField(comment *flacvorbis.MetaDataBlockVorbisComment, field, value strin
 }
 
 // getAlbumTitle determines the best album title to use
-func getAlbumTitle(track Track, album *Album) string {
+func getAlbumTitle(track models.Track, album *models.Album) string {
 	if album != nil && album.Title != "" {
 		return album.Title
 	}
@@ -224,7 +228,7 @@ func getAlbumTitle(track Track, album *Album) string {
 }
 
 // getAlbumArtist determines the best album artist to use
-func getAlbumArtist(track Track, album *Album) string {
+func getAlbumArtist(track models.Track, album *models.Album) string {
 	if album != nil && album.Artist != "" {
 		return album.Artist
 	}
@@ -235,7 +239,7 @@ func getAlbumArtist(track Track, album *Album) string {
 }
 
 // getReleaseDate determines the best release date to use
-func getReleaseDate(track Track, album *Album) string {
+func getReleaseDate(track models.Track, album *models.Album) string {
 	if track.ReleaseDate != "" {
 		return track.ReleaseDate
 	}
@@ -246,7 +250,7 @@ func getReleaseDate(track Track, album *Album) string {
 }
 
 // getGenre determines the best genre to use
-func getGenre(track Track, album *Album) string {
+func getGenre(track models.Track, album *models.Album) string {
 	if track.Genre != "" && track.Genre != "Unknown" {
 		return track.Genre
 	}
@@ -257,7 +261,7 @@ func getGenre(track Track, album *Album) string {
 }
 
 // addMusicBrainzMetadata handles optimized MusicBrainz metadata fetching with caching
-func addMusicBrainzMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track Track, album *Album, albumTitle string, warningCollector *WarningCollector) {
+func addMusicBrainzMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, track models.Track, album *models.Album, albumTitle string, warningCollector *utils.WarningCollector) {
 	// Fetch track-specific metadata
 	mbTrack, err := mbClient.SearchTrack(track.Artist, albumTitle, track.Title)
 	if err != nil {
@@ -278,7 +282,7 @@ func addMusicBrainzMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, trac
 }
 
 // addReleaseMetadata handles release-level MusicBrainz metadata with caching and retry logic
-func addReleaseMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, artist, albumTitle string, warningCollector *WarningCollector) {
+func addReleaseMetadata(comment *flacvorbis.MetaDataBlockVorbisComment, artist, albumTitle string, warningCollector *utils.WarningCollector) {
 	// Check cache first
 	mbRelease := albumCache.GetCachedRelease(artist, albumTitle)
 	
@@ -377,6 +381,82 @@ func detectImageFormat(data []byte) string {
 		// Default to JPEG if we can't determine
 		return "image/jpeg"
 }
+// UpdateTrackWithReleaseMetadata updates a single FLAC file with release metadata
+// Returns true if the track was successfully updated, false otherwise
+func UpdateTrackWithReleaseMetadata(filePath string, mbRelease *musicbrainz.MusicBrainzRelease, warningCollector *utils.WarningCollector) bool {
+	// Open the FLAC file
+	f, err := flac.ParseFile(filePath)
+	if err != nil {
+		return false // Skip files that can't be parsed
+	}
+
+	// Find the existing Vorbis comment block
+	var vorbisBlock *flac.MetaDataBlock
+	for _, block := range f.Meta {
+		if block.Type == flac.VorbisComment {
+			vorbisBlock = block
+			break
+		}
+	}
+
+	if vorbisBlock == nil {
+		return false // No vorbis comment block found
+	}
+
+	// Parse the existing vorbis comment
+	comment, err := flacvorbis.ParseFromMetaDataBlock(*vorbisBlock)
+	if err != nil {
+		return false
+	}
+
+	// Check if release metadata is already present
+	if hasReleaseMetadata(comment) {
+		return false // Already has release metadata
+	}
+
+	// Add the missing release metadata
+	addField(comment, "MUSICBRAINZ_ALBUMID", mbRelease.ID)
+	if len(mbRelease.ArtistCredit) > 0 {
+		addField(comment, "MUSICBRAINZ_ALBUMARTISTID", mbRelease.ArtistCredit[0].Artist.ID)
+	}
+	if mbRelease.ReleaseGroup.ID != "" {
+		addField(comment, "MUSICBRAINZ_RELEASEGROUPID", mbRelease.ReleaseGroup.ID)
+	}
+
+	// Replace the old vorbis comment block with the updated one
+	newVorbisBlock := comment.Marshal()
+	for i, block := range f.Meta {
+		if block.Type == flac.VorbisComment {
+			f.Meta[i] = &newVorbisBlock
+			break
+		}
+	}
+
+	// Save the updated file
+	if err := f.Save(filePath); err != nil {
+		if warningCollector != nil {
+			warningCollector.AddCoverArtMetadataWarning(filePath, fmt.Sprintf("Failed to update release metadata: %v", err))
+		}
+		return false
+	}
+
+	return true // Successfully updated
+}
+
+// hasReleaseMetadata checks if the vorbis comment already contains release metadata
+func hasReleaseMetadata(comment *flacvorbis.MetaDataBlockVorbisComment) bool {
+	// Convert the comment to string and check for MusicBrainz fields
+	commentStr := string(comment.Marshal().Data)
+	return strings.Contains(commentStr, "MUSICBRAINZ_ALBUMID") ||
+		   strings.Contains(commentStr, "MUSICBRAINZ_ALBUMARTISTID") ||
+		   strings.Contains(commentStr, "MUSICBRAINZ_RELEASEGROUPID")
+}
+
+// GetCachedReleaseFromStore retrieves release from the global cache
+func GetCachedReleaseFromStore(artist, album string) *musicbrainz.MusicBrainzRelease {
+	return albumCache.GetCachedRelease(artist, album)
+}
+
 // GetCacheStats returns statistics about the current cache state
 func GetCacheStats() (int, []string) {
 	albumCache.mu.RLock()

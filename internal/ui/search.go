@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"context"
@@ -7,7 +7,14 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"dab-downloader/internal/models"
 )
+
+// Searcher interface to break import cycle
+type Searcher interface {
+	Search(ctx context.Context, query string, searchType string, limit int, debug bool) (*models.SearchResults, error)
+}
 
 var (
 	titleStyle        = lipgloss.NewStyle().MarginLeft(2)
@@ -111,8 +118,9 @@ func (m model) View() string {
 	return "\n" + m.list.View()
 }
 
-func handleSearch(ctx context.Context, api *DabAPI, query string, searchType string, debug bool, auto bool) ([]interface{}, []string, error) {
-	colorInfo.Printf("🔎 Searching for '%s' (type: %s)...\n", query, searchType)
+// HandleSearch performs the search and UI interaction
+func HandleSearch(ctx context.Context, api Searcher, query string, searchType string, debug bool, auto bool) ([]interface{}, []string, error) {
+	Info.Printf("🔎 Searching for '%s' (type: %s)...\n", query, searchType)
 
 	results, err := api.Search(ctx, query, searchType, 20, debug) // Increased limit for better list
 	if err != nil {
@@ -121,7 +129,7 @@ func handleSearch(ctx context.Context, api *DabAPI, query string, searchType str
 
 	totalResults := len(results.Artists) + len(results.Albums) + len(results.Tracks)
 	if totalResults == 0 {
-		colorWarning.Println("No results found.")
+		Warning.Println("No results found.")
 		return nil, nil, nil
 	}
 
@@ -181,7 +189,7 @@ func handleSearch(ctx context.Context, api *DabAPI, query string, searchType str
 
 	m := model{list: l}
 
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
 		return nil, nil, fmt.Errorf("error running selection UI: %w", err)

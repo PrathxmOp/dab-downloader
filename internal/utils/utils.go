@@ -1,16 +1,15 @@
-package main
+package utils
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/mattn/go-isatty"
+	"dab-downloader/internal/ui"
 )
 
 // GetUserInput prompts the user for input with a default value
@@ -18,7 +17,7 @@ func GetUserInput(prompt, defaultValue string) string {
 	if defaultValue != "" {
 		prompt = fmt.Sprintf("%s [%s]", prompt, defaultValue)
 	}
-	colorPrompt.Print(prompt + ": ")
+	ui.Prompt.Print(prompt + ": ")
 	scanner := bufio.NewScanner(os.Stdin)
 	if scanner.Scan() {
 		input := strings.TrimSpace(scanner.Text())
@@ -33,7 +32,7 @@ func GetUserInput(prompt, defaultValue string) string {
 // SanitizeFileName cleans a string to make it safe for use as a file name
 func SanitizeFileName(name string) string {
 	// Replace invalid characters with underscores
-	invalidChars := []string{"<", ">", ":", `"`, `/`, `\\`, `|`, `?`, `*`, "\x00"}
+	invalidChars := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*", "\x00"}
 	result := name
 	for _, char := range invalidChars {
 		result = strings.ReplaceAll(result, char, "_")
@@ -76,35 +75,6 @@ func GetTrackFilename(trackNumber int, title string) string {
 	return fmt.Sprintf("%02d - %s.flac", trackNumber, SanitizeFileName(title))
 }
 
-// LoadConfig loads configuration from a JSON file
-func LoadConfig(filePath string, config *Config) error {
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
-	}
-	if err := json.Unmarshal(data, config); err != nil {
-		return fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-	return nil
-}
-
-// SaveConfig saves configuration to a JSON file
-func SaveConfig(filePath string, config *Config) error {
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-	dir := filepath.Dir(filePath)
-	if err := CreateDirIfNotExists(dir); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-	return nil
-}
-
-
 // TruncateString truncates a string to the specified length, adding ellipsis if truncated.
 func TruncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
@@ -113,7 +83,7 @@ func TruncateString(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
-func idToString(id interface{}) string {
+func IDToString(id interface{}) string {
 	switch v := id.(type) {
 	case string:
 		return v
@@ -139,7 +109,7 @@ func GetYesNoInput(prompt string, defaultValue string) bool {
 		case "n", "no":
 			return false
 		default:
-			colorError.Printf("❌ Invalid input. Please enter 'y' or 'n'.\n")
+			ui.Error.Printf("❌ Invalid input. Please enter 'y' or 'n'.\n")
 		}
 	}
 }
@@ -200,13 +170,13 @@ func ParseSelectionInput(input string, max int) ([]int, error) {
 	return result, nil
 }
 
-func isTTY() bool {
+func IsTTY() bool {
 	return isatty.IsTerminal(os.Stdout.Fd())
 }
 
-// removeSuffix removes a suffix from a track title
-func removeSuffix(trackTitle string, suffix string) string {
-	re := regexp.MustCompile(fmt.Sprintf(`(?i)( - |\s*\()((\d{4} )?)?(%s(ed)?( Version)?|Digital (Master?|%s(ed)?)|Remix)( \d{4})?(\))?$`, suffix, suffix))
+// RemoveSuffix removes a suffix from a track title
+func RemoveSuffix(trackTitle string, suffix string) string {
+	re := regexp.MustCompile(fmt.Sprintf("(?i)( - |\\s*\\()((\\d{4} )?)?(%s(ed)?( Version)?|Digital (Master?|%s(ed)?)|Remix)( \\d{4})?(\\))?$", suffix, suffix))
 	return re.ReplaceAllString(trackTitle, "")
 }
 // VerifyFileSize checks if a file exists and matches the expected size
