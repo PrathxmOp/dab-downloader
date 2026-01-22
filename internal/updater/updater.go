@@ -29,7 +29,7 @@ func CheckForUpdates(conf *config.Config, currentVersion string) {
 	if conf.UpdateRepo != "" {
 		repoURL = conf.UpdateRepo
 	}
-	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/main/version/version.json", repoURL)
+	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/main/cmd/dab-downloader/version.json", repoURL)
 	resp, err := http.Get(rawURL)
 	if err != nil {
 		ui.Error.Printf("Error checking for updates: %v\n", err)
