@@ -44,14 +44,7 @@
 
 ## 🚀 Installation
 
-### Option 1: Automated Script (Recommended)
-The easiest way to install and update.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/PrathxmOp/Support-group-junk/main/Scripts/auto-dl.sh | bash
-```
-
-### Option 2: Pre-built Binaries
+### Option 1: Pre-built Binaries
 1.  Visit the [**Releases Page**](https://github.com/PrathxmOp/dab-downloader/releases/latest).
 2.  Download the archive matching your OS (Windows, macOS, Linux).
 3.  Extract the binary and (on Linux/macOS) make it executable:
@@ -59,7 +52,7 @@ curl -fsSL https://raw.githubusercontent.com/PrathxmOp/Support-group-junk/main/S
     chmod +x dab-downloader
     ```
 
-### Option 3: Docker
+### Option 2: Docker
 Run entirely within a container to keep your system clean.
 
 ```bash
@@ -68,6 +61,15 @@ docker pull prathxm/dab-downloader:latest
 
 # Run a search command
 docker run -it -v $(pwd)/music:/music -v $(pwd)/config:/config prathxm/dab-downloader search "The Weeknd"
+```
+
+### Option 3: Build from Source
+If you prefer to build it yourself, you'll need Go 1.21+ installed.
+
+```bash
+git clone https://github.com/PrathxmOp/dab-downloader.git
+cd dab-downloader
+go build -o dab-downloader ./cmd/dab-downloader
 ```
 
 ---
