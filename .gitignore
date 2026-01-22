@@ -1,5 +1,5 @@
 config/config.json
-dab-downloader
+/dab-downloader
 config.json
 dab-downloader-linux-amd64
 *.md
