@@ -33,6 +33,7 @@
 
 ### 🔗 Integrations
 *   **Spotify**: Import and download entire playlists or albums directly.
+*   **ListenBrainz**: Import tracks from ListenBrainz JSPF playlists.
 *   **Navidrome**: Seamlessly sync downloaded content to your Navidrome media server.
 *   **MusicBrainz**: Enhances metadata accuracy with advanced database lookups and caching.
 
@@ -143,6 +144,14 @@ Download music from a Spotify playlist or album URL.
 *   `--auto`: Auto-select first search result on DAB.
 ```bash
 ./dab-downloader spotify "https://open.spotify.com/playlist/..." --expand
+```
+
+**`listenbrainz [url]`**
+Download tracks from a ListenBrainz playlist URL.
+*   `--auto`: Automatically download the first result found on DAB.
+*   `--format/--bitrate`: Conversion settings.
+```bash
+./dab-downloader listenbrainz "https://listenbrainz.org/playlist/..."
 ```
 
 **`navidrome [spotify_url]`**
