@@ -29,6 +29,7 @@ import (
 	"dab-downloader/internal/version"
 	"dab-downloader/pkg/navidrome"
 	"dab-downloader/pkg/spotify"
+	"dab-downloader/pkg/listenbrainz"
 )
 
 var toolVersion string
@@ -554,6 +555,74 @@ var addToPlaylistCmd = &cobra.Command{
 	},
 }
 
+var listenbrainzCmd = &cobra.Command{
+	Use:   "listenbrainz [url]",
+	Short: "Download a ListenBrainz playlist.",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		conf, a, d := initConfigAPIAndDownloader()
+		if conf.Format != "flac" && !ffmpeg.CheckFFmpeg() {
+			ui.Error.Println("❌ ffmpeg is not installed or not in your PATH. Please install ffmpeg to use the format conversion feature.")
+			return
+		}
+		url := args[0]
+
+		lbClient := listenbrainz.NewListenBrainzClient()
+		lbTracks, lbName, err := lbClient.GetPlaylistTracks(url)
+		if err != nil {
+			ui.Error.Printf("❌ Failed to get tracks from ListenBrainz: %v\n", err)
+			return
+		}
+
+		ui.Info.Printf("🎵 Found %d tracks in ListenBrainz playlist: %s\n", len(lbTracks), lbName)
+
+		var pool *pb.Pool
+		var localPool bool
+		if utils.IsTTY() && len(lbTracks) > 1 {
+			var err error
+			pool, err = pb.StartPool()
+			if err != nil {
+				ui.Error.Printf("❌ Failed to start progress bar pool: %v\n", err)
+			} else {
+				localPool = true
+			}
+		}
+
+		for _, lbTrack := range lbTracks {
+			trackName := lbTrack.Name + " - " + lbTrack.Artist
+			selectedItems, itemTypes, err := ui.HandleSearch(context.Background(), a, trackName, "track", debug, auto)
+			if err != nil {
+				ui.Error.Printf("❌ Search failed for track %s: %v\n", trackName, err)
+				continue
+			}
+
+			if len(selectedItems) == 0 {
+				ui.Warning.Printf("⚠️ No results found for track: %s\n", trackName)
+				continue
+			}
+
+			time.Sleep(500 * time.Millisecond)
+
+			for i, selectedItem := range selectedItems {
+				itemType := itemTypes[i]
+				if itemType == "track" {
+					track := selectedItem.(models.Track)
+					ui.Info.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
+					if err := d.DownloadSingleTrack(context.Background(), track, debug, conf.Format, conf.Bitrate, pool, conf, nil); err != nil {
+						ui.Error.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
+					} else {
+						ui.Success.Println("✅ Track download completed for", track.Title)
+					}
+				}
+			}
+		}
+
+		if localPool && pool != nil {
+			pool.Stop()
+		}
+	},
+}
+
 var debugCmd = &cobra.Command{
 	Use:   "debug",
 	Short: "Run various debugging utilities.",
@@ -749,11 +818,16 @@ func init() {
 	navidromeCmd.Flags().BoolVar(&expandNavidrome, "expand", false, "Expand to full albums")
 	navidromeCmd.Flags().BoolVar(&auto, "auto", false, "Automatically download first result")
 
+	listenbrainzCmd.Flags().BoolVar(&auto, "auto", false, "Automatically download first result")
+	listenbrainzCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to")
+	listenbrainzCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats")
+
 	rootCmd.AddCommand(artistCmd)
 	rootCmd.AddCommand(albumCmd)
 	rootCmd.AddCommand(searchCmd)
 	rootCmd.AddCommand(spotifyCmd)
 	rootCmd.AddCommand(navidromeCmd)
+	rootCmd.AddCommand(listenbrainzCmd)
 	rootCmd.AddCommand(addToPlaylistCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(logoutCmd)

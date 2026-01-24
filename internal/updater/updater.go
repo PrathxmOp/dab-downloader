@@ -59,12 +59,12 @@ func CheckForUpdates(conf *config.Config, currentVersion string) {
 		input = strings.ToLower(strings.TrimSpace(input))
 
 		if input == "y" || input == "" {
-			ui.Info.Println("Attempting to open the Update Guide in your browser...")
-			updateURL := "https://github.com/PrathxmOp/dab-downloader/#option-1-using-auto-dl.sh-script-recommended"
+			ui.Info.Println("Attempting to open the Installation Guide in your browser...")
+			updateURL := "https://github.com/PrathxmOp/dab-downloader#-installation"
 			if err := openBrowser(updateURL, conf); err != nil {
 				ui.Warning.Printf("Failed to open browser automatically: %v\n", err)
-				ui.Info.Println("Please refer to the 'Update Guide' section in the README for detailed instructions:")
-				ui.Info.Println("https://github.com/PrathxmOp/dab-downloader/#update-guide")
+				ui.Info.Println("Please refer to the 'Installation' section in the README for detailed instructions:")
+				ui.Info.Println("https://github.com/PrathxmOp/dab-downloader#-installation")
 			}
 		} else {
 			ui.Info.Println("You can update later by referring to the 'Update Guide' in the README.")
