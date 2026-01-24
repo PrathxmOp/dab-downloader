@@ -154,12 +154,14 @@ Download tracks from a ListenBrainz playlist URL.
 ./dab-downloader listenbrainz "https://listenbrainz.org/playlist/..."
 ```
 
-**`navidrome [spotify_url]`**
-Sync a Spotify playlist to your Navidrome server. It searches for tracks on your Navidrome server, downloads missing ones from DAB, and adds them to a Navidrome playlist.
+**`navidrome [playlist_url]`**
+Sync a Spotify or ListenBrainz playlist to your Navidrome server. It searches for tracks on your Navidrome server, downloads missing ones from DAB, and adds them to a Navidrome playlist.
 *   `--ignore-suffix string`: Ignore specific suffixes in track titles during matching (e.g., "Remastered").
 *   `--expand`: Expand playlist to full albums.
 ```bash
-./dab-downloader navidrome "https://open.spotify.com/playlist/..." --ignore-suffix "2024 Remaster"
+./dab-downloader navidrome "https://open.spotify.com/playlist/..."
+# OR
+./dab-downloader navidrome "https://listenbrainz.org/playlist/..."
 ```
 
 **`add-to-playlist [playlist_id] [song_id...]`**

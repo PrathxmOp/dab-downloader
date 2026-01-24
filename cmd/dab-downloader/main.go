@@ -365,34 +365,76 @@ var spotifyCmd = &cobra.Command{
 }
 
 var navidromeCmd = &cobra.Command{
-	Use:   "navidrome [spotify_url]",
-	Short: "Copy a Spotify playlist or album to Navidrome.",
+	Use:   "navidrome [playlist_url]",
+	Short: "Copy a Spotify or ListenBrainz playlist to Navidrome.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		conf, a, d := initConfigAPIAndDownloader()
-		spotifyURL := args[0]
+		playlistURL := args[0]
 
-		spotifyClient := spotify.NewSpotifyClient(conf.SpotifyClientID, conf.SpotifyClientSecret)
-		if err := spotifyClient.Authenticate(); err != nil {
-			ui.Error.Printf("❌ Failed to authenticate with Spotify: %v\n", err)
-			return
+		// Define a unified track structure to handle both sources
+		type UnifiedTrack struct {
+			Name      string
+			Artist    string
+			AlbumName string
 		}
 
-		var spotifyTracks []spotify.SpotifyTrack
-		var spotifyName string
-		var err error
+		var tracks []UnifiedTrack
+		var playlistName string
 
-		if strings.Contains(spotifyURL, "/playlist/") {
-			spotifyTracks, spotifyName, err = spotifyClient.GetPlaylistTracks(spotifyURL)
-		} else if strings.Contains(spotifyURL, "/album/") {
-			spotifyTracks, spotifyName, err = spotifyClient.GetAlbumTracks(spotifyURL)
+		// Determine source and fetch tracks
+		if strings.Contains(playlistURL, "spotify.com") {
+			spotifyClient := spotify.NewSpotifyClient(conf.SpotifyClientID, conf.SpotifyClientSecret)
+			if err := spotifyClient.Authenticate(); err != nil {
+				ui.Error.Printf("❌ Failed to authenticate with Spotify: %v\n", err)
+				return
+			}
+
+			var spotifyTracks []spotify.SpotifyTrack
+			var err error
+
+			if strings.Contains(playlistURL, "/playlist/") {
+				spotifyTracks, playlistName, err = spotifyClient.GetPlaylistTracks(playlistURL)
+			} else if strings.Contains(playlistURL, "/album/") {
+				spotifyTracks, playlistName, err = spotifyClient.GetAlbumTracks(playlistURL)
+			} else {
+				ui.Error.Println("❌ Invalid Spotify URL. Please provide a playlist or album URL.")
+				return
+			}
+
+			if err != nil {
+				ui.Error.Printf("❌ Failed to get tracks from Spotify: %v\n", err)
+				return
+			}
+			
+			// Convert to UnifiedTrack
+			for _, t := range spotifyTracks {
+				tracks = append(tracks, UnifiedTrack{
+					Name:      t.Name,
+					Artist:    t.Artist,
+					AlbumName: t.AlbumName, // Might be empty for some Spotify tracks
+				})
+			}
+
+		} else if strings.Contains(playlistURL, "listenbrainz.org") {
+			lbClient := listenbrainz.NewListenBrainzClient()
+			lbTracks, lbName, err := lbClient.GetPlaylistTracks(playlistURL)
+			if err != nil {
+				ui.Error.Printf("❌ Failed to get tracks from ListenBrainz: %v\n", err)
+				return
+			}
+			playlistName = lbName
+			
+			// Convert to UnifiedTrack
+			for _, t := range lbTracks {
+				tracks = append(tracks, UnifiedTrack{
+					Name:      t.Name,
+					Artist:    t.Artist,
+					AlbumName: t.AlbumName,
+				})
+			}
 		} else {
-			ui.Error.Println("❌ Invalid Spotify URL. Please provide a playlist or album URL.")
-			return
-		}
-
-		if err != nil {
-			ui.Error.Printf("❌ Failed to get tracks from Spotify: %v\n", err)
+			ui.Error.Println("❌ Unsupported URL. Please provide a valid Spotify or ListenBrainz playlist URL.")
 			return
 		}
 
@@ -404,9 +446,12 @@ var navidromeCmd = &cobra.Command{
 
 		if expandNavidrome {
 			ui.Info.Println("Expanding playlist to download full albums...")
-			uniqueAlbums := make(map[string]spotify.SpotifyTrack)
-			for _, track := range spotifyTracks {
-				albumKey := strings.ToLower(track.AlbumName + " - " + track.AlbumArtist)
+			uniqueAlbums := make(map[string]UnifiedTrack)
+			for _, track := range tracks {
+				if track.AlbumName == "" {
+					continue
+				}
+				albumKey := strings.ToLower(track.AlbumName + " - " + track.Artist)
 				if _, exists := uniqueAlbums[albumKey]; !exists {
 					uniqueAlbums[albumKey] = track
 				}
@@ -415,10 +460,10 @@ var navidromeCmd = &cobra.Command{
 			ui.Info.Printf("Found %d unique albums in the playlist.\n", len(uniqueAlbums))
 
 			for _, track := range uniqueAlbums {
-				albumSearchQuery := track.AlbumName + " - " + track.AlbumArtist
+				albumSearchQuery := track.AlbumName + " - " + track.Artist
 
-				ui.Info.Printf("Searching for album '%s' by '%s' in Navidrome...", track.AlbumName, track.AlbumArtist)
-				navidromeAlbum, err := navidromeClient.SearchAlbum(track.AlbumName, track.AlbumArtist)
+				ui.Info.Printf("Searching for album '%s' by '%s' in Navidrome...", track.AlbumName, track.Artist)
+				navidromeAlbum, err := navidromeClient.SearchAlbum(track.AlbumName, track.Artist)
 				if err != nil {
 					ui.Warning.Printf("⚠️ Error searching for album %s in Navidrome: %v\n", albumSearchQuery, err)
 				} else if navidromeAlbum != nil {
@@ -453,44 +498,45 @@ var navidromeCmd = &cobra.Command{
 				}
 			}
 		}
-		playlistName := utils.GetUserInput("Enter a name for the new Navidrome playlist", spotifyName)
-		if err := navidromeClient.CreatePlaylist(playlistName); err != nil {
+		
+		finalPlaylistName := utils.GetUserInput("Enter a name for the new Navidrome playlist", playlistName)
+		if err := navidromeClient.CreatePlaylist(finalPlaylistName); err != nil {
 			ui.Error.Printf("❌ Failed to create Navidrome playlist: %v\n", err)
 			return
 		}
 
-		playlistID, err := navidromeClient.SearchPlaylist(playlistName)
+		playlistID, err := navidromeClient.SearchPlaylist(finalPlaylistName)
 		if err != nil {
-			ui.Error.Printf("❌ Failed to find newly created playlist '%s': %v\n", playlistName, err)
+			ui.Error.Printf("❌ Failed to find newly created playlist '%s': %v\n", finalPlaylistName, err)
 			return
 		}
 
 		var navidromeTrackIDs []string
 
-		for _, spotifyTrack := range spotifyTracks {
-			trackName := spotifyTrack.Name
+		for _, track := range tracks {
+			trackName := track.Name
 			if ignoreSuffix != "" {
 				trackName = utils.RemoveSuffix(trackName, ignoreSuffix)
 			}
-			track, err := navidromeClient.SearchTrack(trackName, spotifyTrack.Artist, spotifyTrack.AlbumName)
+			foundTrack, err := navidromeClient.SearchTrack(trackName, track.Artist, track.AlbumName)
 			if err != nil {
-				ui.Warning.Printf("⚠️ Error searching for track %s by %s on Navidrome: %v\n", spotifyTrack.Name, spotifyTrack.Artist, err)
+				ui.Warning.Printf("⚠️ Error searching for track %s by %s on Navidrome: %v\n", track.Name, track.Artist, err)
 				continue
 			}
 
-			if track != nil {
-				navidromeTrackIDs = append(navidromeTrackIDs, track.ID)
+			if foundTrack != nil {
+				navidromeTrackIDs = append(navidromeTrackIDs, foundTrack.ID)
 				ui.Success.Println("track is already found skipping")
 			} else {
-				ui.Warning.Printf("⚠️ Track %s by %s not found on Navidrome. Searching DAB...\n", spotifyTrack.Name, spotifyTrack.Artist)
+				ui.Warning.Printf("⚠️ Track %s by %s not found on Navidrome. Searching DAB...\n", track.Name, track.Artist)
 
-				dabSearchQuery := spotifyTrack.Name + " - " + spotifyTrack.Artist
+				dabSearchQuery := track.Name + " - " + track.Artist
 				if ignoreSuffix != "" {
-					dabSearchQuery = trackName + " - " + spotifyTrack.Artist
+					dabSearchQuery = trackName + " - " + track.Artist
 				}
 				dabSearchResults, dabItemTypes, err := ui.HandleSearch(context.Background(), a, dabSearchQuery, "track", debug, auto)
 				if err != nil {
-					ui.Error.Printf("❌ Failed to search DAB for %s: %v\n", spotifyTrack.Name, err)
+					ui.Error.Printf("❌ Failed to search DAB for %s: %v\n", track.Name, err)
 					continue
 				}
 
@@ -525,7 +571,7 @@ var navidromeCmd = &cobra.Command{
 			if err := navidromeClient.AddTracksToPlaylist(playlistID, navidromeTrackIDs); err != nil {
 				ui.Error.Printf("❌ Failed to add tracks to Navidrome playlist: %v\n", err)
 			} else {
-				ui.Success.Printf("✅ Successfully added %d tracks to Navidrome playlist '%s'\n", len(navidromeTrackIDs), playlistName)
+				ui.Success.Printf("✅ Successfully added %d tracks to Navidrome playlist '%s'\n", len(navidromeTrackIDs), finalPlaylistName)
 			}
 		}
 	},
