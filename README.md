@@ -64,7 +64,13 @@ The fastest way to install or update is using our installation script:
 curl -fsSL https://raw.githubusercontent.com/PrathxmOp/dab-downloader/main/install.sh | bash
 ```
 
-### Option 2: Pre-built Binaries
+### Option 2: One-Line Installer (Windows PowerShell)
+Run the following in PowerShell (as Administrator if you want to update PATH for all users, otherwise User PATH is used):
+```powershell
+iwr -useb https://raw.githubusercontent.com/PrathxmOp/dab-downloader/main/install.ps1 | iex
+```
+
+### Option 3: Pre-built Binaries
 1.  Visit the [**Releases Page**](https://github.com/PrathxmOp/dab-downloader/releases/latest).
 2.  Download the binary matching your OS and architecture (e.g., `dab-downloader-linux-amd64`).
 3.  (Linux/macOS) Make it executable and move it to your path:
