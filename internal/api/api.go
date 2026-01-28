@@ -114,11 +114,17 @@ func (api *DabAPI) Logout() error {
 	// 1. Clear cookie jar
 	api.client.Jar, _ = cookiejar.New(nil)
 
-	// 2. Remove token file
+		// 2. Remove token file
 
-tokenPath := filepath.Join("config", ".token")
-	if _, err := os.Stat(tokenPath); err == nil {
-		if err := os.Remove(tokenPath); err != nil {
+	
+
+		tokenPath := filepath.Join(config.GetConfigDir(), ".token")
+
+		if _, err := os.Stat(tokenPath); err == nil {
+
+			if err := os.Remove(tokenPath); err != nil {
+
+	
 			return fmt.Errorf("failed to remove token file: %w", err)
 		}
 	}
@@ -143,8 +149,9 @@ type LoginStatus struct {
 func (api *DabAPI) GetLoginStatus() LoginStatus {
 	// Check if token file exists
 
-tokenPath := filepath.Join("config", ".token")
+	tokenPath := filepath.Join(config.GetConfigDir(), ".token")
 	if _, err := os.Stat(tokenPath); errors.Is(err, os.ErrNotExist) {
+
 		// Check legacy path
 		if _, err := os.Stat(".token"); errors.Is(err, os.ErrNotExist) {
 			return LoginStatus{IsLoggedIn: false, Message: "No session token found. You are not logged in."}
@@ -156,8 +163,13 @@ tokenPath := filepath.Join("config", ".token")
 
 func (api *DabAPI) LoadCookies() (bool, error) {
 
-tokenPath := filepath.Join("config", ".token")
+
+
+	tokenPath := filepath.Join(config.GetConfigDir(), ".token")
+
 	if _, err := os.Stat(tokenPath); errors.Is(err, os.ErrNotExist) {
+
+
 		// Fallback to current directory for backward compatibility or if config dir structure is different
 		tokenPath = ".token"
 		if _, err := os.Stat(tokenPath); errors.Is(err, os.ErrNotExist) {
@@ -242,11 +254,12 @@ func (api *DabAPI) Login(email string, password string) error {
 		}
 
 		// Ensure config directory exists
-		if _, err := os.Stat("config"); os.IsNotExist(err) {
-			os.Mkdir("config", 0755)
+		configDir := config.GetConfigDir()
+		if _, err := os.Stat(configDir); os.IsNotExist(err) {
+			os.MkdirAll(configDir, 0755)
 		}
 
-		tokenPath := filepath.Join("config", ".token")
+		tokenPath := filepath.Join(configDir, ".token")
 		err := os.WriteFile(tokenPath, []byte(token), 0644)
 		if err != nil {
 			return fmt.Errorf("unable to write .token file: %w", err)

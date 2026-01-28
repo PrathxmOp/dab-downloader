@@ -740,7 +740,7 @@ func initConfigAPIAndDownloader() (*config.Config, *api.DabAPI, *downloader.Down
 		WarningBehavior:  "summary",
 	}
 
-	configFile := filepath.Join("config", "config.json")
+	configFile := config.GetConfigFilePath()
 
 	if !utils.FileExists(configFile) {
 		ui.Info.Println("✨ Welcome to DAB Downloader! Let's set up your configuration.")

@@ -65,8 +65,49 @@ func SaveConfig(filePath string, config *Config) error {
 	if err := utils.CreateDirIfNotExists(dir); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+		if err := os.WriteFile(filePath, data, 0644); err != nil {
+			return fmt.Errorf("failed to write config file: %w", err)
+		}
+		return nil
 	}
-	return nil
-}
+	
+	// GetConfigFilePath returns the path to the configuration file.
+	// Priority:
+	// 1. Local config/config.json (if exists) - Backward compatibility / Portable
+	// 2. Local config directory (if exists) - Portable mode / Docker volume
+	// 3. Docker environment - Default to local config/config.json
+	// 4. Standard user config directory (~/.config/dab-downloader/config.json)
+	func GetConfigFilePath() string {
+		localConfig := filepath.Join("config", "config.json")
+		localConfigDir := "config"
+	
+		// 1. If local config file exists, use it
+		if utils.FileExists(localConfig) {
+			return localConfig
+		}
+	
+		// 2. If local config directory exists, use it (implies portable mode or Docker volume)
+		if info, err := os.Stat(localConfigDir); err == nil && info.IsDir() {
+			return localConfig
+		}
+	
+		// 3. If running in Docker, default to local config
+		if _, err := os.Stat("/.dockerenv"); err == nil {
+			return localConfig
+		}
+	
+		// 4. Try standard user config directory
+		userConfigDir, err := os.UserConfigDir()
+		if err == nil {
+			appConfigDir := filepath.Join(userConfigDir, "dab-downloader")
+			return filepath.Join(appConfigDir, "config.json")
+		}
+	
+		// Fallback to local config path
+		return localConfig
+	}
+		// GetConfigDir returns the directory where configuration files are stored.
+	func GetConfigDir() string {
+		return filepath.Dir(GetConfigFilePath())
+	}
+	

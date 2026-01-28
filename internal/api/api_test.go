@@ -1,6 +1,7 @@
 package api
 
 import (
+	"dab-downloader/internal/config"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -69,7 +70,7 @@ func TestLogin(t *testing.T) {
 	}
 
 	// Verify token file was created
-	tokenPath := filepath.Join("config", ".token")
+	tokenPath := filepath.Join(config.GetConfigDir(), ".token")
 	if _, err := os.Stat(tokenPath); os.IsNotExist(err) {
 		t.Errorf("Token file was not created at %s", tokenPath)
 	}
