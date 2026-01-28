@@ -9,6 +9,13 @@ REPO="PrathxmOp/dab-downloader"
 BINARY_NAME="dab-downloader"
 INSTALL_DIR="/usr/local/bin"
 
+# Detect Termux
+IS_TERMUX=false
+if [ -n "$TERMUX_VERSION" ]; then
+    IS_TERMUX=true
+    INSTALL_DIR="$PREFIX/bin"
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -74,7 +81,10 @@ curl -L -o "${BINARY_NAME}" "${DOWNLOAD_URL}"
 
 # Install
 printf "🚀 Installing to ${INSTALL_DIR}...\n"
-if [ ! -w "${INSTALL_DIR}" ]; then
+if [ "$IS_TERMUX" = true ]; then
+    mv "${BINARY_NAME}" "${INSTALL_DIR}/"
+    chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
+elif [ ! -w "${INSTALL_DIR}" ]; then
     printf "🔐 Sudo access required to install to ${INSTALL_DIR}\n"
     sudo mv "${BINARY_NAME}" "${INSTALL_DIR}/"
     sudo chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
