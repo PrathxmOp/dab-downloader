@@ -96,7 +96,7 @@ These flags can be used with any command:
 **`login [email] [password]`**
 Authenticates your session with the DAB API.
 ```bash
-./dab-downloader login user@example.com mypassword
+dab-downloader login user@example.com mypassword
 ```
 
 **`logout`**
@@ -116,7 +116,7 @@ Search for artists, albums, or tracks using an interactive TUI.
 *   `--format string`: Target format (`flac`, `mp3`, `ogg`, `opus`). Default: `flac`.
 *   `--bitrate string`: Bitrate for lossy formats (e.g., `320`). Default: `320`.
 ```bash
-./dab-downloader search "Interstellar" --type album
+dab-downloader search "Interstellar" --type album
 ```
 
 **`artist [artist_id]`**
@@ -125,14 +125,14 @@ Download an artist's entire discography.
 *   `--no-confirm`: Skip the confirmation prompt before starting downloads.
 *   `--format/--bitrate`: Conversion settings.
 ```bash
-./dab-downloader artist "12345" --filter "albums"
+dab-downloader artist "12345" --filter "albums"
 ```
 
 **`album [album_id]`**
 Download a specific album by its ID.
 *   `--format/--bitrate`: Conversion settings.
 ```bash
-./dab-downloader album "67890" --format mp3
+dab-downloader album "67890" --format mp3
 ```
 
 ---
@@ -144,7 +144,7 @@ Download music from a Spotify playlist or album URL.
 *   `--expand`: Instead of downloading individual tracks, search for and download the full albums containing those tracks.
 *   `--auto`: Auto-select first search result on DAB.
 ```bash
-./dab-downloader spotify "https://open.spotify.com/playlist/..." --expand
+dab-downloader spotify "https://open.spotify.com/playlist/..." --expand
 ```
 
 **`listenbrainz [url]`**
@@ -152,7 +152,7 @@ Download tracks from a ListenBrainz playlist URL.
 *   `--auto`: Automatically download the first result found on DAB.
 *   `--format/--bitrate`: Conversion settings.
 ```bash
-./dab-downloader listenbrainz "https://listenbrainz.org/playlist/..."
+dab-downloader listenbrainz "https://listenbrainz.org/playlist/..."
 ```
 
 **`navidrome [playlist_url]`**
@@ -160,9 +160,9 @@ Sync a Spotify or ListenBrainz playlist to your Navidrome server. It searches fo
 *   `--ignore-suffix string`: Ignore specific suffixes in track titles during matching (e.g., "Remastered").
 *   `--expand`: Expand playlist to full albums.
 ```bash
-./dab-downloader navidrome "https://open.spotify.com/playlist/..."
+dab-downloader navidrome "https://open.spotify.com/playlist/..."
 # OR
-./dab-downloader navidrome "https://listenbrainz.org/playlist/..."
+dab-downloader navidrome "https://listenbrainz.org/playlist/..."
 ```
 
 **`add-to-playlist [playlist_id] [song_id...]`**
