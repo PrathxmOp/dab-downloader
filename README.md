@@ -73,8 +73,7 @@ curl -fsSL https://raw.githubusercontent.com/PrathxmOp/Support-group-junk/main/S
 
 ### Option 3: Docker
 ```bash
-docker pull prathxm/dab-downloader:latest
-docker run -it -v $(pwd)/music:/music -v $(pwd)/config:/config prathxm/dab-downloader search "The Weeknd"
+docker run -it -v $(pwd)/music:/music -v $(pwd)/config:/app/config prathxm/dab-downloader search "The Weeknd"
 ```
 
 ---
@@ -187,7 +186,17 @@ Print the current version of `dab-downloader`.
 
 ## ⚙️ Configuration
 
-On first run, a `config/config.json` is generated.
+`dab-downloader` uses a `config.json` file to store your preferences. On first run, it will guide you through a setup wizard.
+
+### 📂 Configuration Locations
+The application looks for configuration in the following order:
+1.  **Portable Mode**: A `config/` directory next to the binary.
+2.  **Standard Location**:
+    *   **Linux/macOS**: `~/.config/dab-downloader/config.json`
+    *   **Windows**: `%AppData%\dab-downloader\config.json`
+3.  **Docker**: `/config/config.json` (inside the container).
+
+### 📝 Sample Configuration
 ```json
 {
   "APIURL": "https://dabmusic.xyz",
@@ -199,7 +208,11 @@ On first run, a `config/config.json` is generated.
   "SpotifyClientSecret": "...",
   "NavidromeURL": "...",
   "NavidromeUsername": "...",
-  "NavidromePassword": "..."
+  "NavidromePassword": "...",
+  "naming": {
+    "album_folder_mask": "{artist}/{album}",
+    "file_mask": "{track_number} - {title}"
+  }
 }
 ```
 
