@@ -7,13 +7,15 @@ set -e
 
 REPO="PrathxmOp/dab-downloader"
 BINARY_NAME="dab-downloader"
-INSTALL_DIR="/usr/local/bin"
 
 # Detect Termux
 IS_TERMUX=false
 if [ -n "$TERMUX_VERSION" ]; then
     IS_TERMUX=true
     INSTALL_DIR="$PREFIX/bin"
+else
+    INSTALL_DIR="$HOME/.local/bin"
+    mkdir -p "$INSTALL_DIR"
 fi
 
 # Colors for output
@@ -81,20 +83,19 @@ curl -L -o "${BINARY_NAME}" "${DOWNLOAD_URL}"
 
 # Install
 printf "🚀 Installing to ${INSTALL_DIR}...\n"
-if [ "$IS_TERMUX" = true ]; then
-    mv "${BINARY_NAME}" "${INSTALL_DIR}/"
-    chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-elif [ ! -w "${INSTALL_DIR}" ]; then
-    printf "🔐 Sudo access required to install to ${INSTALL_DIR}\n"
-    sudo mv "${BINARY_NAME}" "${INSTALL_DIR}/"
-    sudo chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-else
-    mv "${BINARY_NAME}" "${INSTALL_DIR}/"
-    chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-fi
+mv "${BINARY_NAME}" "${INSTALL_DIR}/"
+chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
 
 # Cleanup
 rm -rf "${TMP_DIR}"
 
 printf "${GREEN}✅ Successfully installed DAB Downloader ${LATEST_VERSION}!${NC}\n"
-printf "Run '${BINARY_NAME} version' to verify.\n"
+
+# Check if INSTALL_DIR is in PATH
+if [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]]; then
+    printf "${RED}⚠️  Warning: ${INSTALL_DIR} is not in your PATH.${NC}\n"
+    printf "You may need to add it to your shell configuration (e.g., .bashrc or .zshrc):\n"
+    printf "${BLUE}export PATH=\$PATH:${INSTALL_DIR}${NC}\n"
+else
+    printf "Run '${BINARY_NAME} version' to verify.\n"
+fi

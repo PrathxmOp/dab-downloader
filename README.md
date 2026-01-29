@@ -76,7 +76,8 @@ iwr -useb https://raw.githubusercontent.com/PrathxmOp/dab-downloader/main/instal
 3.  (Linux/macOS) Make it executable and move it to your path:
     ```bash
     chmod +x dab-downloader-linux-amd64
-    sudo mv dab-downloader-linux-amd64 /usr/local/bin/dab-downloader
+    mkdir -p ~/.local/bin
+    mv dab-downloader-linux-amd64 ~/.local/bin/dab-downloader
     ```
 
 ### Option 3: Docker
