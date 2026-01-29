@@ -54,6 +54,16 @@ type Album struct {
 	MusicBrainzID string      `json:"musicbrainzId,omitempty"` // MusicBrainz ID for the album
 }
 
+type Playlist struct {
+	ID          string  `json:"id"`
+	Title       string  `json:"title"`
+	Description string  `json:"description,omitempty"`
+	Cover       string  `json:"cover,omitempty"`
+	Tracks      []Track `json:"tracks,omitempty"`
+	TotalTracks int     `json:"totalTracks,omitempty"`
+	Owner       string  `json:"owner,omitempty"`
+}
+
 // API response structures
 type ArtistResponse struct {
 	Artist Artist `json:"artist"`
@@ -61,6 +71,10 @@ type ArtistResponse struct {
 
 type AlbumResponse struct {
 	Album Album `json:"album"`
+}
+
+type PlaylistResponse struct {
+	Playlist Playlist `json:"playlist"`
 }
 
 type TrackResponse struct {
@@ -83,10 +97,15 @@ type TrackSearchResponse struct {
 	Results []Track `json:"results"`
 }
 
+type PlaylistSearchResponse struct {
+	Results []Playlist `json:"results"`
+}
+
 type SearchResults struct {
-	Artists []Artist `json:"artists"`
-	Albums  []Album  `json:"albums"`
-	Tracks  []Track  `json:"tracks"`
+	Artists   []Artist   `json:"artists"`
+	Albums    []Album    `json:"albums"`
+	Tracks    []Track    `json:"tracks"`
+	Playlists []Playlist `json:"playlists"`
 }
 
 // Query parameter structure

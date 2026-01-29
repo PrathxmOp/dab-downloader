@@ -451,3 +451,158 @@ func (d *Downloader) updateFailedTracksWithReleaseMetadata(albumDir string, albu
 		warningCollector.RemoveMusicBrainzReleaseWarning(album.Artist, album.Title)
 	}
 }
+
+// DownloadPlaylist downloads all tracks from a playlist
+func (d *Downloader) DownloadPlaylist(ctx context.Context, playlistID string, conf *config.Config, debug bool, pool *pb.Pool, warningCollector *utils.WarningCollector) (*models.DownloadStats, error) {
+	var ownCollector bool
+	if warningCollector == nil {
+		warningCollector = utils.NewWarningCollector(conf.WarningBehavior != "silent")
+		ownCollector = true
+	}
+
+	playlist, err := d.api.GetPlaylist(ctx, playlistID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get playlist info: %w", err)
+	}
+
+	ui.Info.Printf("🎵 Found %d tracks in playlist: %s\n", len(playlist.Tracks), playlist.Title)
+
+	playlistDir := filepath.Join(d.outputLocation, "Playlists", utils.SanitizeFileName(playlist.Title))
+	if err := os.MkdirAll(playlistDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create playlist directory: %w", err)
+	}
+
+	// Download playlist cover if available
+	var playlistCoverData []byte
+	if playlist.Cover != "" {
+		playlistCoverData, err = d.api.DownloadCover(ctx, playlist.Cover)
+		if err != nil {
+			if conf.WarningBehavior == "immediate" {
+				ui.Warning.Printf("⚠️ Could not download cover art for playlist %s: %v\n", playlist.Title, err)
+			} else {
+				warningCollector.AddCoverArtDownloadWarning(playlist.Title, err.Error())
+			}
+		}
+	}
+
+	var wg sync.WaitGroup
+	sem := semaphore.NewWeighted(int64(conf.Parallelism))
+	stats := &models.DownloadStats{}
+	errorChan := make(chan struct {
+		Title string
+		Err   error
+	}, len(playlist.Tracks))
+
+	var localPool bool
+	if pool == nil && utils.IsTTY() {
+		var err error
+		pool, err = pb.StartPool()
+		if err != nil {
+			ui.Error.Printf("❌ Failed to start progress bar pool: %v\n", err)
+		} else {
+			localPool = true
+		}
+	}
+
+	bars := make([]*pb.ProgressBar, len(playlist.Tracks))
+	if pool != nil {
+		for i, track := range playlist.Tracks {
+			bar := pb.New(0)
+			bar.SetTemplateString(`{{ string . "prefix" }} {{ bar . }} {{ percent . }} | {{ speed . "%s/s" }} | ETA {{ rtime . "%s" }}`)
+			bar.Set("prefix", fmt.Sprintf("Track %-2d: %-40s", i+1, utils.TruncateString(track.Title, 40)))
+			bars[i] = bar
+			pool.Add(bar)
+		}
+	}
+
+	for idx, track := range playlist.Tracks {
+		wg.Add(1)
+		if err := sem.Acquire(ctx, 1); err != nil {
+			ui.Error.Printf("Failed to acquire semaphore: %v\n", err)
+			wg.Done()
+			continue
+		}
+
+		go func(idx int, track models.Track) {
+			defer wg.Done()
+			defer sem.Release(1)
+
+			// For playlists, we might want to organize by artist/album instead of a flat playlist folder
+			// or just put them in the playlist folder. Let's follow the playlist folder for now.
+			trackFileName := fmt.Sprintf("%02d - %s - %s.flac", idx+1, utils.SanitizeFileName(track.Artist), utils.SanitizeFileName(track.Title))
+			trackPath := filepath.Join(playlistDir, trackFileName)
+
+			targetPath := trackPath
+			if conf.Format != "flac" {
+				targetPath = strings.TrimSuffix(trackPath, ".flac") + "." + conf.Format
+			}
+
+			if utils.FileExists(targetPath) || (conf.Format != "flac" && utils.FileExists(trackPath)) {
+				existingPath := targetPath
+				if !utils.FileExists(targetPath) {
+					existingPath = trackPath
+				}
+
+				if conf.WarningBehavior == "immediate" {
+					ui.Warning.Printf("⭐ Track already exists: %s\n", existingPath)
+				} else {
+					warningCollector.AddTrackSkippedWarning(existingPath)
+				}
+				stats.SkippedCount++
+				return
+			}
+
+			// For metadata accuracy, we should ideally fetch the full album info for each track
+			// but that's very expensive for large playlists. We'll use the track info we have.
+			// If missing, DownloadTrack handles it.
+
+			var bar *pb.ProgressBar
+			if pool != nil {
+				bar = bars[idx]
+			}
+
+			// Try to get album info for better metadata if possible
+			album := &models.Album{
+				Title:  track.Album,
+				Artist: track.Artist,
+				Cover:  track.Cover,
+				Tracks: []models.Track{track},
+			}
+
+			var trackCoverData []byte
+			if track.Cover != "" {
+				trackCoverData, _ = d.api.DownloadCover(ctx, track.Cover)
+			}
+			if trackCoverData == nil {
+				trackCoverData = playlistCoverData
+			}
+
+			if _, err := d.DownloadTrack(ctx, track, album, trackPath, trackCoverData, bar, debug, conf.Format, conf.Bitrate, conf, warningCollector); err != nil {
+				errorChan <- struct {
+					Title string
+					Err   error
+				}{track.Title, fmt.Errorf("track %s: %w", track.Title, err)}
+				return
+			}
+
+			stats.SuccessCount++
+		}(idx, track)
+	}
+
+	wg.Wait()
+	if localPool && pool != nil {
+		pool.Stop()
+	}
+	close(errorChan)
+
+	for err := range errorChan {
+		stats.FailedCount++
+		stats.FailedItems = append(stats.FailedItems, fmt.Sprintf("%s: %v", err.Title, err.Err))
+	}
+
+	if ownCollector && conf.WarningBehavior == "summary" {
+		warningCollector.PrintSummary()
+	}
+
+	return stats, nil
+}

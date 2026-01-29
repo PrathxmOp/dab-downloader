@@ -127,7 +127,7 @@ func HandleSearch(ctx context.Context, api Searcher, query string, searchType st
 		return nil, nil, err
 	}
 
-	totalResults := len(results.Artists) + len(results.Albums) + len(results.Tracks)
+	totalResults := len(results.Artists) + len(results.Albums) + len(results.Tracks) + len(results.Playlists)
 	if totalResults == 0 {
 		Warning.Println("No results found.")
 		return nil, nil, nil
@@ -145,6 +145,9 @@ func HandleSearch(ctx context.Context, api Searcher, query string, searchType st
 		} else if len(results.Tracks) > 0 {
 			selectedItems = append(selectedItems, results.Tracks[0])
 			itemTypes = append(itemTypes, "track")
+		} else if len(results.Playlists) > 0 {
+			selectedItems = append(selectedItems, results.Playlists[0])
+			itemTypes = append(itemTypes, "playlist")
 		}
 		return selectedItems, itemTypes, nil
 	}
@@ -165,6 +168,14 @@ func HandleSearch(ctx context.Context, api Searcher, query string, searchType st
 			desc:         fmt.Sprintf("Album by %s", album.Artist),
 			originalItem: album,
 			itemType:     "album",
+		})
+	}
+	for _, playlist := range results.Playlists {
+		items = append(items, searchItem{
+			title:        playlist.Title,
+			desc:         fmt.Sprintf("Playlist by %s", playlist.Owner),
+			originalItem: playlist,
+			itemType:     "playlist",
 		})
 	}
 	for _, track := range results.Tracks {

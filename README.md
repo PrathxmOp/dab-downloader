@@ -136,10 +136,17 @@ dab-downloader artist "12345" --filter "albums"
 ```
 
 **`album [album_id]`**
-Download a specific album by its ID.
+Download a specific album by its ID or shared URL.
 *   `--format/--bitrate`: Conversion settings.
 ```bash
 dab-downloader album "67890" --format mp3
+```
+
+**`playlist [playlist_id]`**
+Download a DAB playlist by its ID or shared URL.
+*   `--format/--bitrate`: Conversion settings.
+```bash
+dab-downloader playlist "344f44f8-..."
 ```
 
 ---

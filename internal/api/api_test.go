@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"dab-downloader/internal/config"
 	"encoding/json"
 	"net/http"
@@ -85,5 +86,43 @@ func TestLogin(t *testing.T) {
 	err = api.Login("wrong@example.com", "wrong")
 	if err == nil {
 		t.Errorf("Expected login failure, got nil")
+	}
+}
+
+func TestGetPlaylist(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/libraries/test-playlist-id" {
+			t.Errorf("Expected path /api/libraries/test-playlist-id, got %s", r.URL.Path)
+			return
+		}
+
+		resp := map[string]interface{}{
+			"playlist": map[string]interface{}{
+				"id":    "test-playlist-id",
+				"title": "Test Playlist",
+				"tracks": []map[string]interface{}{
+					{
+						"id":     "track-1",
+						"title":  "Track 1",
+						"artist": "Artist 1",
+					},
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	api := NewDabAPI(server.URL, ".", server.Client())
+	playlist, err := api.GetPlaylist(context.Background(), "test-playlist-id")
+	if err != nil {
+		t.Fatalf("GetPlaylist failed: %v", err)
+	}
+
+	if playlist.Title != "Test Playlist" {
+		t.Errorf("Expected title 'Test Playlist', got %s", playlist.Title)
+	}
+	if len(playlist.Tracks) != 1 {
+		t.Errorf("Expected 1 track, got %d", len(playlist.Tracks))
 	}
 }

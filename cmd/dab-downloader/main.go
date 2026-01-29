@@ -152,11 +152,49 @@ var albumCmd = &cobra.Command{
 			return
 		}
 		albumID := args[0]
+		// Handle URL if provided
+		if strings.Contains(albumID, "/shared/album/") {
+			parts := strings.Split(albumID, "/")
+			albumID = parts[len(parts)-1]
+			if strings.Contains(albumID, "?") {
+				albumID = strings.Split(albumID, "?")[0]
+			}
+		}
 		ui.Info.Println("🎵 Starting album download for ID:", albumID)
 		if _, err := d.DownloadAlbum(context.Background(), albumID, conf, debug, nil, nil); err != nil {
 			ui.Error.Printf("❌ Failed to download album: %v\n", err)
 		} else {
 			ui.Success.Println("✅ Album download completed!")
+		}
+	},
+}
+
+var playlistCmd = &cobra.Command{
+	Use:   "playlist [playlist_id_or_url]",
+	Short: "Download a DAB playlist by its ID or URL.",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		conf, _, d := initConfigAPIAndDownloader()
+		if conf.Format != "flac" && !ffmpeg.CheckFFmpeg() {
+			printInstallInstructions()
+			return
+		}
+		
+		playlistID := args[0]
+		// Handle URL if provided
+		if strings.Contains(playlistID, "/shared/library/") {
+			parts := strings.Split(playlistID, "/")
+			playlistID = parts[len(parts)-1]
+			if strings.Contains(playlistID, "?") {
+				playlistID = strings.Split(playlistID, "?")[0]
+			}
+		}
+
+		ui.Info.Println("🎵 Starting playlist download for ID:", playlistID)
+		if _, err := d.DownloadPlaylist(context.Background(), playlistID, conf, debug, nil, nil); err != nil {
+			ui.Error.Printf("❌ Failed to download playlist: %v\n", err)
+		} else {
+			ui.Success.Println("✅ Playlist download completed!")
 		}
 	},
 }
@@ -214,6 +252,14 @@ var searchCmd = &cobra.Command{
 					ui.Error.Printf("❌ Failed to download album %s: %v\n", album.Title, err)
 				} else {
 					ui.Success.Println("✅ Album download completed for", album.Title)
+				}
+			case "playlist":
+				playlist := selectedItem.(models.Playlist)
+				ui.Info.Println("🎵 Starting playlist download for:", playlist.Title)
+				if _, err := d.DownloadPlaylist(context.Background(), playlist.ID, conf, debug, pool, nil); err != nil {
+					ui.Error.Printf("❌ Failed to download playlist %s: %v\n", playlist.Title, err)
+				} else {
+					ui.Success.Println("✅ Playlist download completed for", playlist.Title)
 				}
 			case "track":
 				track := selectedItem.(models.Track)
@@ -694,6 +740,25 @@ var testArtistEndpointsCmd = &cobra.Command{
 	},
 }
 
+var testPlaylistEndpointsCmd = &cobra.Command{
+	Use:   "playlist-endpoints [playlist_id]",
+	Short: "Test different playlist endpoint formats for a given playlist ID.",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		_, api, _ := initConfigAPIAndDownloader()
+		playlistID := args[0]
+		// Handle URL if provided
+		if strings.Contains(playlistID, "/shared/library/") {
+			parts := strings.Split(playlistID, "/")
+			playlistID = parts[len(parts)-1]
+			if strings.Contains(playlistID, "?") {
+				playlistID = strings.Split(playlistID, "?")[0]
+			}
+		}
+		api.TestPlaylistEndpoints(context.Background(), playlistID)
+	},
+}
+
 var comprehensiveArtistDebugCmd = &cobra.Command{
 	Use:   "comprehensive-artist-debug [artist_id]",
 	Short: "Perform comprehensive debugging for an artist ID.",
@@ -848,6 +913,9 @@ func init() {
 	searchCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to")
 	searchCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats")
 
+	playlistCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to")
+	playlistCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats")
+
 	spotifyCmd.Flags().StringVar(&spotifyPlaylist, "spotify", "", "Spotify playlist URL")
 	spotifyCmd.Flags().BoolVar(&auto, "auto", false, "Automatically download first result")
 	spotifyCmd.Flags().BoolVar(&expandPlaylist, "expand", false, "Expand playlist to full albums")
@@ -870,6 +938,7 @@ func init() {
 
 	rootCmd.AddCommand(artistCmd)
 	rootCmd.AddCommand(albumCmd)
+	rootCmd.AddCommand(playlistCmd)
 	rootCmd.AddCommand(searchCmd)
 	rootCmd.AddCommand(spotifyCmd)
 	rootCmd.AddCommand(navidromeCmd)
@@ -882,6 +951,7 @@ func init() {
 
 	debugCmd.AddCommand(testApiAvailabilityCmd)
 	debugCmd.AddCommand(testArtistEndpointsCmd)
+	debugCmd.AddCommand(testPlaylistEndpointsCmd)
 	debugCmd.AddCommand(comprehensiveArtistDebugCmd)
 
 	rootCmd.AddCommand(versionCmd)

@@ -53,6 +53,52 @@ func (api *DabAPI) TestArtistEndpoints(ctx context.Context, artistID string) {
 	}
 }
 
+// TestPlaylistEndpoints tests different possible playlist endpoint formats
+func (api *DabAPI) TestPlaylistEndpoints(ctx context.Context, playlistID string) {
+	fmt.Printf("🔍 Testing different playlist endpoint formats for ID: %s\n", playlistID)
+
+	endpoints := []struct {
+		path   string
+		params []models.QueryParam
+		description string
+	}{
+		{fmt.Sprintf("api/libraries/%s", playlistID), nil, "Verified shared library (api/libraries/{id})"},
+		{"api/playlist", []models.QueryParam{{Name: "playlistId", Value: playlistID}}, "Standard playlist (api/playlist?playlistId=)"},
+		{"api/shared/library", []models.QueryParam{{Name: "id", Value: playlistID}}, "Shared library (api/shared/library?id=)"},
+		{"api/shared/library", []models.QueryParam{{Name: "libraryId", Value: playlistID}}, "Shared library (api/shared/library?libraryId=)"},
+		{"shared/library", []models.QueryParam{{Name: "id", Value: playlistID}}, "Shared library no api prefix (shared/library?id=)"},
+		{"api/library/shared", []models.QueryParam{{Name: "id", Value: playlistID}}, "Shared library alt (api/library/shared?id=)"},
+		{"api/library", []models.QueryParam{{Name: "id", Value: playlistID}}, "Library endpoint (api/library?id=)"},
+		{"api/playlist/shared", []models.QueryParam{{Name: "id", Value: playlistID}}, "Shared playlist (api/playlist/shared?id=)"},
+		{"api/shared/playlist", []models.QueryParam{{Name: "id", Value: playlistID}}, "Shared playlist alt (api/shared/playlist?id=)"},
+	}
+
+	for i, endpoint := range endpoints {
+		fmt.Printf("\n🧪 Test %d: %s\n", i+1, endpoint.description)
+
+		resp, err := api.Request(ctx, endpoint.path, true, endpoint.params)
+		if err != nil {
+			fmt.Printf("   ❌ Failed: %v\n", err)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if err != nil {
+			fmt.Printf("   ❌ Failed to read body: %v\n", err)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			fmt.Printf("   ✅ SUCCESS! Status: %d, Body length: %d bytes\n", resp.StatusCode, len(body))
+			fmt.Printf("   Response preview: %.200s...\n", string(body))
+		} else {
+			fmt.Printf("   ⚠️  Status: %d, Body: %s\n", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // TestAPIAvailability tests basic API connectivity
 func (api *DabAPI) TestAPIAvailability(ctx context.Context) {
 	fmt.Println("🌐 Testing basic API connectivity...")

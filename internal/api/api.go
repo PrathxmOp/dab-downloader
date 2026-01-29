@@ -337,6 +337,48 @@ func (api *DabAPI) GetAlbum(ctx context.Context, albumID string) (*models.Album,
 	return &albumResp.Album, nil
 }
 
+// GetPlaylist retrieves playlist information
+func (api *DabAPI) GetPlaylist(ctx context.Context, playlistID string) (*models.Playlist, error) {
+	resp, err := api.Request(ctx, fmt.Sprintf("api/libraries/%s", playlistID), true, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get playlist: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var playlistResp models.PlaylistResponse
+	if err := json.NewDecoder(resp.Body).Decode(&playlistResp); err != nil {
+		return nil, fmt.Errorf("failed to decode playlist response: %w", err)
+	}
+
+	// Process tracks to add missing metadata
+	for i := range playlistResp.Playlist.Tracks {
+		track := &playlistResp.Playlist.Tracks[i]
+
+		// Set track number if not provided
+		if track.TrackNumber == 0 {
+			track.TrackNumber = i + 1
+		}
+		if track.DiscNumber == 0 {
+			track.DiscNumber = 1
+		}
+		if track.Year == "" && len(track.ReleaseDate) >= 4 {
+			track.Year = track.ReleaseDate[:4]
+		}
+	}
+
+	// Set total tracks if not provided
+	if playlistResp.Playlist.TotalTracks == 0 {
+		playlistResp.Playlist.TotalTracks = len(playlistResp.Playlist.Tracks)
+	}
+
+	// Prepend API endpoint to cover URL if it's a relative path
+	if strings.HasPrefix(playlistResp.Playlist.Cover, "/") {
+		playlistResp.Playlist.Cover = api.endpoint + playlistResp.Playlist.Cover
+	}
+
+	return &playlistResp.Playlist, nil
+}
+
 // GetArtist retrieves artist information and discography
 func (api *DabAPI) GetArtist(ctx context.Context, artistID string, conf *config.Config, debug bool) (*models.Artist, error) {
 	if debug {
@@ -540,11 +582,11 @@ func (api *DabAPI) Search(ctx context.Context, query string, searchType string, 
 	results := &models.SearchResults{}
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	errChan := make(chan error, 3)
+	errChan := make(chan error, 4)
 
 	searchTypes := []string{}
 	if searchType == "all" {
-		searchTypes = []string{"artist", "album", "track"}
+		searchTypes = []string{"artist", "album", "track", "playlist"}
 	} else {
 		searchTypes = []string{searchType}
 	}
@@ -629,6 +671,16 @@ func (api *DabAPI) Search(ctx context.Context, query string, searchType string, 
 					}
 				} else if res, ok := data["results"]; ok {
 					if err := json.Unmarshal(res, &results.Tracks); err != nil {
+						errChan <- err
+					}
+				}
+			case "playlist":
+				if res, ok := data["playlists"]; ok {
+					if err := json.Unmarshal(res, &results.Playlists); err != nil {
+						errChan <- err
+					}
+				} else if res, ok := data["results"]; ok {
+					if err := json.Unmarshal(res, &results.Playlists); err != nil {
 						errChan <- err
 					}
 				}
