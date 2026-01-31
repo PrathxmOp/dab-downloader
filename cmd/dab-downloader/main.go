@@ -1,11 +1,9 @@
 package main
 
 import (
-	"crypto/tls"
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,6 +19,7 @@ import (
 	"dab-downloader/internal/updater"
 	"dab-downloader/internal/utils"
 	"dab-downloader/internal/version"
+	"dab-downloader/pkg/netutil"
 )
 
 var toolVersion string
@@ -149,15 +148,7 @@ func initConfigAPIAndDownloader() (*config.Config, *api.DabAPI, *downloader.Down
 		conf.WarningBehavior = warningBehavior
 	}
 
-	httpClient := &http.Client{
-		Timeout: 10 * time.Minute,
-	}
-
-	if insecure {
-		httpClient.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-	}
+	httpClient := netutil.NewRobustHTTPClient(10*time.Minute, insecure)
 
 	a := api.NewDabAPI(conf.APIURL, conf.DownloadLocation, httpClient)
 	d := downloader.NewDownloader(a, conf.DownloadLocation)

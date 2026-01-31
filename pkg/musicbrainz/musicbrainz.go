@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/time/rate"
 	"dab-downloader/internal/utils"
+	"dab-downloader/pkg/netutil"
 )
 
 const (
@@ -50,9 +51,7 @@ type MusicBrainzClient struct {
 // NewMusicBrainzClientWithConfig creates a new MusicBrainz API client with custom retry configuration
 func NewMusicBrainzClientWithConfig(config MusicBrainzConfig) *MusicBrainzClient {
 	return &MusicBrainzClient{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client: netutil.NewRobustHTTPClient(30*time.Second, false),
 		config: config,
 		debug:  false,
 		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
@@ -63,9 +62,7 @@ func NewMusicBrainzClientWithConfig(config MusicBrainzConfig) *MusicBrainzClient
 // NewMusicBrainzClientWithDebug creates a new MusicBrainz API client with debug mode
 func NewMusicBrainzClientWithDebug(debug bool) *MusicBrainzClient {
 	return &MusicBrainzClient{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client: netutil.NewRobustHTTPClient(30*time.Second, false),
 		config: DefaultMusicBrainzConfig(),
 		debug:  debug,
 		rateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),

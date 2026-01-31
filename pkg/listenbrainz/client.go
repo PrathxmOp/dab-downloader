@@ -3,6 +3,8 @@ package listenbrainz
 import (
 	"net/http"
 	"time"
+
+	"dab-downloader/pkg/netutil"
 )
 
 type ListenBrainzClient struct {
@@ -13,9 +15,7 @@ type ListenBrainzClient struct {
 func NewListenBrainzClient() *ListenBrainzClient {
 	return &ListenBrainzClient{
 		BaseURL: "https://api.listenbrainz.org/1",
-		Client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		Client: netutil.NewRobustHTTPClient(30*time.Second, false),
 	}
 }
 

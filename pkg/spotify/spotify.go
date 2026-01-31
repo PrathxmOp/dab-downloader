@@ -8,7 +8,10 @@ import (
 
 	"github.com/zmb3/spotify/v2"
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
+	"dab-downloader/pkg/netutil"
+	"time"
 )
 
 // SpotifyTrack represents a track from Spotify
@@ -22,18 +25,22 @@ type SpotifyTrack struct {
 // Authenticate authenticates the client with the spotify api
 func (s *SpotifyClient) Authenticate() error {
 	ctx := context.Background()
+	
+	// Use robust client for OAuth2
+	httpClient := netutil.NewRobustHTTPClient(30*time.Second, false)
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+
 	config := &clientcredentials.Config{
 		ClientID:     s.ID,
 		ClientSecret: s.Secret,
 		TokenURL:     spotifyauth.TokenURL,
 	}
-	token, err := config.Token(ctx)
-	if err != nil {
-		return err
-	}
-
-	httpClient := spotifyauth.New().Client(ctx, token)
-	s.client = spotify.New(httpClient)
+	
+	// This client will now use our robust httpClient for token exchange and API calls
+	authClient := config.Client(ctx)
+	authClient.Timeout = 30 * time.Second
+	
+	s.client = spotify.New(authClient)
 	return nil
 }
 

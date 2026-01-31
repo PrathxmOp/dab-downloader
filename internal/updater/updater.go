@@ -9,12 +9,14 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-version"
 	
 	"dab-downloader/internal/config"
 	"dab-downloader/internal/ui"
 	internalversion "dab-downloader/internal/version"
+	"dab-downloader/pkg/netutil"
 )
 
 // CheckForUpdates checks for a newer version on GitHub
@@ -30,7 +32,9 @@ func CheckForUpdates(conf *config.Config, currentVersion string) {
 		repoURL = conf.UpdateRepo
 	}
 	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/main/cmd/dab-downloader/version.json", repoURL)
-	resp, err := http.Get(rawURL)
+	
+	client := netutil.NewRobustHTTPClient(30*time.Second, false)
+	resp, err := client.Get(rawURL)
 	if err != nil {
 		ui.Error.Printf("Error checking for updates: %v\n", err)
 		return

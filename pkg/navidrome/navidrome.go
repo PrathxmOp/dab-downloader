@@ -11,7 +11,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
+	"dab-downloader/pkg/netutil"
 	subsonic "github.com/delucks/go-subsonic"
 )
 
@@ -19,7 +21,8 @@ import (
 func (n *NavidromeClient) Authenticate() error {
 	// Ping the server to get the salt
 	pingURL := fmt.Sprintf("%s/rest/ping.view?v=1.16.1&c=dab-downloader&f=json", n.URL)
-	resp, err := http.Get(pingURL)
+	client := netutil.NewRobustHTTPClient(30*time.Second, false)
+	resp, err := client.Get(pingURL)
 	if err != nil {
 		return err
 	}
@@ -44,7 +47,7 @@ func (n *NavidromeClient) Authenticate() error {
 	if pingResponse.SubsonicResponse.Status != "ok" {
 		// Try with auth
 		pingURL = fmt.Sprintf("%s/rest/ping.view?u=%s&p=%s&v=1.16.1&c=dab-downloader&f=json", n.URL, n.Username, n.Password)
-		resp, err = http.Get(pingURL)
+		resp, err = client.Get(pingURL)
 		if err != nil {
 			return err
 		}
@@ -68,7 +71,7 @@ func (n *NavidromeClient) Authenticate() error {
 	n.Token = getSaltedPassword(n.Password, n.Salt)
 
 	n.Client = subsonic.Client{
-		Client:       http.DefaultClient,
+		Client:       netutil.NewRobustHTTPClient(30*time.Second, false),
 		BaseUrl:      n.URL,
 		User:         n.Username,
 		ClientName:   "dab-downloader",
