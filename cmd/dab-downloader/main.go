@@ -263,11 +263,30 @@ var searchCmd = &cobra.Command{
 				}
 			case "track":
 				track := selectedItem.(models.Track)
-				ui.Info.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
-				if err := d.DownloadSingleTrack(context.Background(), track, debug, conf.Format, conf.Bitrate, pool, conf, nil); err != nil {
-					ui.Error.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
+				
+				// Offer to download the full album if in interactive mode
+				downloadAlbum := false
+				if !auto && utils.IsTTY() {
+					prompt := fmt.Sprintf("Do you want to download the entire album '%s' instead of just the track '%s'?", track.Album, track.Title)
+					if utils.GetYesNoInput(prompt, "n") {
+						downloadAlbum = true
+					}
+				}
+
+				if downloadAlbum {
+					ui.Info.Println("🎵 Starting album download for:", track.Album, "by", track.Artist)
+					if _, err := d.DownloadAlbum(context.Background(), track.AlbumID, conf, debug, pool, nil); err != nil {
+						ui.Error.Printf("❌ Failed to download album %s: %v\n", track.Album, err)
+					} else {
+						ui.Success.Println("✅ Album download completed for", track.Album)
+					}
 				} else {
-					ui.Success.Println("✅ Track download completed for", track.Title)
+					ui.Info.Println("🎵 Starting track download for:", track.Title, "by", track.Artist)
+					if err := d.DownloadSingleTrack(context.Background(), track, debug, conf.Format, conf.Bitrate, pool, conf, nil); err != nil {
+						ui.Error.Printf("❌ Failed to download track %s: %v\n", track.Title, err)
+					} else {
+						ui.Success.Println("✅ Track download completed for", track.Title)
+					}
 				}
 			default:
 				ui.Error.Println("❌ Unknown item type selected.")

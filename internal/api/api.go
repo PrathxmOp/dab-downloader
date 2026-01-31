@@ -674,6 +674,12 @@ func (api *DabAPI) Search(ctx context.Context, query string, searchType string, 
 						errChan <- err
 					}
 				}
+				// Fix missing album name from AlbumTitle which is returned by some endpoints
+				for i := range results.Tracks {
+					if results.Tracks[i].Album == "" && results.Tracks[i].AlbumTitle != "" {
+						results.Tracks[i].Album = results.Tracks[i].AlbumTitle
+					}
+				}
 			case "playlist":
 				if res, ok := data["playlists"]; ok {
 					if err := json.Unmarshal(res, &results.Playlists); err != nil {
