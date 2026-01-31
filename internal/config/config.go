@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"dab-downloader/internal/utils"
 )
 
 const (
@@ -62,7 +60,7 @@ func SaveConfig(filePath string, config *Config) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 	dir := filepath.Dir(filePath)
-	if err := utils.CreateDirIfNotExists(dir); err != nil {
+	if err := createDirIfNotExists(dir); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 		if err := os.WriteFile(filePath, data, 0644); err != nil {
@@ -81,11 +79,10 @@ func SaveConfig(filePath string, config *Config) error {
 		localConfig := filepath.Join("config", "config.json")
 		localConfigDir := "config"
 	
-		// 1. If local config file exists, use it
-		if utils.FileExists(localConfig) {
-			return localConfig
-		}
-	
+			// 1. If local config file exists, use it
+			if fileExists(localConfig) {
+				return localConfig
+			}	
 		// 2. If local config directory exists, use it (implies portable mode or Docker volume)
 		if info, err := os.Stat(localConfigDir); err == nil && info.IsDir() {
 			return localConfig

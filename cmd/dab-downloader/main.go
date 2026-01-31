@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"dab-downloader/internal/api"
+	"dab-downloader/internal/batch"
 	"dab-downloader/internal/config"
 	"dab-downloader/internal/downloader"
 	"dab-downloader/internal/ffmpeg"
@@ -734,6 +735,25 @@ var listenbrainzCmd = &cobra.Command{
 	},
 }
 
+var batchCmd = &cobra.Command{
+	Use:   "batch [file_path]",
+	Short: "Download items listed in a text file.",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		conf, a, d := initConfigAPIAndDownloader()
+		if conf.Format != "flac" && !ffmpeg.CheckFFmpeg() {
+			ui.Error.Println("❌ ffmpeg is not installed or not in your PATH. Please install ffmpeg to use the format conversion feature.")
+			return
+		}
+		filePath := args[0]
+		if err := batch.ProcessBatchFile(context.Background(), filePath, a, d, conf, debug); err != nil {
+			ui.Error.Printf("❌ Batch processing failed: %v\n", err)
+		} else {
+			ui.Success.Println("✅ Batch processing completed!")
+		}
+	},
+}
+
 var debugCmd = &cobra.Command{
 	Use:   "debug",
 	Short: "Run various debugging utilities.",
@@ -786,6 +806,17 @@ var comprehensiveArtistDebugCmd = &cobra.Command{
 		_, api, _ := initConfigAPIAndDownloader()
 		artistID := args[0]
 		api.DebugArtistID(context.Background(), artistID)
+	},
+}
+
+var configCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Interactively edit the configuration.",
+	Run: func(cmd *cobra.Command, args []string) {
+		conf, _, _ := initConfigAPIAndDownloader()
+		if err := ui.RunConfigMenu(conf); err != nil {
+			ui.Error.Printf("❌ Failed to run config menu: %v\n", err)
+		}
 	},
 }
 
@@ -962,6 +993,7 @@ func init() {
 	rootCmd.AddCommand(spotifyCmd)
 	rootCmd.AddCommand(navidromeCmd)
 	rootCmd.AddCommand(listenbrainzCmd)
+	rootCmd.AddCommand(batchCmd)
 	rootCmd.AddCommand(addToPlaylistCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(logoutCmd)
@@ -973,6 +1005,7 @@ func init() {
 	debugCmd.AddCommand(testPlaylistEndpointsCmd)
 	debugCmd.AddCommand(comprehensiveArtistDebugCmd)
 
+	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(versionCmd)
 }
 
