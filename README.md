@@ -29,7 +29,9 @@
 *   **High-Fidelity Audio**: Downloads pristine FLAC files directly from source.
 *   **Smart Metadata**: Automatically tags files with Title, Artist, Album, Genre, Year, ISRC, and more via MusicBrainz.
 *   **Format Conversion**: Built-in support for converting to MP3, OGG, or Opus on the fly.
+*   **Batch Downloading**: Process multiple URLs or search queries from a simple text file.
 *   **Interactive TUI**: Navigate search results and select multiple items with a modern, terminal-based user interface.
+*   **Configuration Editor**: Manage your settings interactively without manual JSON editing.
 
 ### 🔗 Integrations
 *   **Spotify**: Import and download entire playlists or albums directly.
@@ -118,6 +120,7 @@ Checks if you are currently logged in and if the session is valid.
 
 **`search [query]`**
 Search for artists, albums, or tracks using an interactive TUI.
+*   **Smart Selection**: When selecting a single track, the CLI will offer to download the entire containing album.
 *   `--type string`: Type of content to search for (`artist`, `album`, `track`, `all`). Default: `all`.
 *   `--auto`: Automatically download the first result.
 *   `--format string`: Target format (`flac`, `mp3`, `ogg`, `opus`). Default: `flac`.
@@ -147,6 +150,12 @@ Download a DAB playlist by its ID or shared URL.
 *   `--format/--bitrate`: Conversion settings.
 ```bash
 dab-downloader playlist "344f44f8-..."
+```
+
+**`batch [file_path]`**
+Process multiple downloads from a text file (one item per line). Supports Spotify URLs, DAB URLs, and search queries.
+```bash
+dab-downloader batch my_list.txt
 ```
 
 ---
@@ -195,6 +204,9 @@ Test various API endpoint formats for a specific artist ID.
 **`debug comprehensive-artist-debug [artist_id]`**
 Run a full diagnostic suite for a specific artist ID.
 
+**`config`**
+Open the interactive Configuration Editor to manage your settings.
+
 **`version`**
 Print the current version of `dab-downloader`.
 
@@ -202,7 +214,11 @@ Print the current version of `dab-downloader`.
 
 ## ⚙️ Configuration
 
-`dab-downloader` uses a `config.json` file to store your preferences. On first run, it will guide you through a setup wizard.
+`dab-downloader` uses a `config.json` file to store your preferences. You can edit this file manually or use the interactive editor:
+
+```bash
+dab-downloader config
+```
 
 ### 📂 Configuration Locations
 The application looks for configuration in the following order:
@@ -211,6 +227,11 @@ The application looks for configuration in the following order:
     *   **Linux/macOS**: `~/.config/dab-downloader/config.json`
     *   **Windows**: `%AppData%\dab-downloader\config.json`
 3.  **Docker**: `/config/config.json` (inside the container).
+
+### 🛡️ Key Settings
+*   **Parallelism**: Number of simultaneous downloads (default: `5`).
+*   **Verify Downloads**: When enabled, the application verifies the integrity of each download by comparing the file size on disk with the expected size from the API. Corrupted or partial files are automatically deleted to keep your library clean.
+*   **Format/Bitrate**: Default settings for audio conversion.
 
 ### 📝 Sample Configuration
 ```json
