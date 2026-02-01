@@ -42,6 +42,7 @@ var (
 	auto                bool
 	expandPlaylist      bool
 	expandNavidrome     bool
+	expandSearch        bool
 	navidromeURL        string
 	navidromeUsername   string
 	navidromePassword   string
@@ -172,6 +173,7 @@ func init() {
 
 	searchCmd.Flags().StringVar(&searchType, "type", "all", "Type of content to search for")
 	searchCmd.Flags().BoolVar(&auto, "auto", false, "Automatically download first result")
+	searchCmd.Flags().BoolVar(&expandSearch, "expand", false, "Expand to full album download")
 	searchCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to")
 	searchCmd.Flags().StringVar(&bitrate, "bitrate", "320", "Bitrate for lossy formats")
 
@@ -193,6 +195,8 @@ func init() {
 	navidromeCmd.Flags().StringVar(&ignoreSuffix, "ignore-suffix", "", "Ignore suffix in search")
 	navidromeCmd.Flags().BoolVar(&expandNavidrome, "expand", false, "Expand to full albums")
 	navidromeCmd.Flags().BoolVar(&auto, "auto", false, "Automatically download first result")
+
+	batchCmd.Flags().BoolVar(&expandSearch, "expand", false, "Expand to full album download")
 
 	listenbrainzCmd.Flags().BoolVar(&auto, "auto", false, "Automatically download first result")
 	listenbrainzCmd.Flags().StringVar(&format, "format", "flac", "Format to convert to")

@@ -166,9 +166,9 @@ var searchCmd = &cobra.Command{
 			case "track":
 				track := selectedItem.(models.Track)
 				
-				// Offer to download the full album if in interactive mode
-				downloadAlbum := false
-				if !auto && utils.IsTTY() {
+				// Offer to download the full album if in interactive mode or if expand flag is set
+				downloadAlbum := expandSearch
+				if !downloadAlbum && !auto && utils.IsTTY() {
 					prompt := fmt.Sprintf("Do you want to download the entire album '%s' instead of just the track '%s'?", track.Album, track.Title)
 					if utils.GetYesNoInput(prompt, "n") {
 						downloadAlbum = true
@@ -212,7 +212,7 @@ var batchCmd = &cobra.Command{
 			return
 		}
 		filePath := args[0]
-		if err := batch.ProcessBatchFile(context.Background(), filePath, a, d, conf, debug); err != nil {
+		if err := batch.ProcessBatchFile(context.Background(), filePath, a, d, conf, debug, expandSearch); err != nil {
 			ui.Error.Printf("❌ Batch processing failed: %v\n", err)
 		} else {
 			ui.Success.Println("✅ Batch processing completed!")

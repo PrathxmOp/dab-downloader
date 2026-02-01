@@ -18,7 +18,7 @@ import (
 )
 
 // ProcessBatchFile reads a file and processes each line as a download task
-func ProcessBatchFile(ctx context.Context, filePath string, api *api.DabAPI, d *downloader.Downloader, conf *config.Config, debug bool) error {
+func ProcessBatchFile(ctx context.Context, filePath string, api *api.DabAPI, d *downloader.Downloader, conf *config.Config, debug bool, expand bool) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open batch file: %w", err)
@@ -43,7 +43,7 @@ func ProcessBatchFile(ctx context.Context, filePath string, api *api.DabAPI, d *
 
 	for i, line := range lines {
 		ui.Info.Printf("\n🔄 Processing item %d/%d: %s\n", i+1, len(lines), line)
-		err := processLine(ctx, line, api, d, conf, debug)
+		err := processLine(ctx, line, api, d, conf, debug, expand)
 		if err != nil {
 			ui.Error.Printf("❌ Failed to process '%s': %v\n", line, err)
 		} else {
@@ -56,10 +56,10 @@ func ProcessBatchFile(ctx context.Context, filePath string, api *api.DabAPI, d *
 	return nil
 }
 
-func processLine(ctx context.Context, line string, api *api.DabAPI, d *downloader.Downloader, conf *config.Config, debug bool) error {
+func processLine(ctx context.Context, line string, api *api.DabAPI, d *downloader.Downloader, conf *config.Config, debug bool, expand bool) error {
 	// 1. Spotify URL
 	if strings.Contains(line, "spotify.com") {
-		return processSpotify(ctx, line, api, d, conf, debug)
+		return processSpotify(ctx, line, api, d, conf, debug, expand)
 	}
 
 	// 2. DAB Album URL
@@ -89,10 +89,10 @@ func processLine(ctx context.Context, line string, api *api.DabAPI, d *downloade
 	// 4. Fallback: Search (assume it's a query or ISRC)
 	ui.Info.Printf("🔎 Treating '%s' as search query...\n", line)
 	// Auto-select first result
-	return processSearch(ctx, line, api, d, conf, debug)
+	return processSearch(ctx, line, api, d, conf, debug, expand)
 }
 
-func processSpotify(ctx context.Context, url string, api *api.DabAPI, d *downloader.Downloader, conf *config.Config, debug bool) error {
+func processSpotify(ctx context.Context, url string, api *api.DabAPI, d *downloader.Downloader, conf *config.Config, debug bool, expand bool) error {
 	if conf.SpotifyClientID == "" || conf.SpotifyClientSecret == "" {
 		return fmt.Errorf("spotify credentials not configured")
 	}
@@ -122,14 +122,14 @@ func processSpotify(ctx context.Context, url string, api *api.DabAPI, d *downloa
 	for _, spotifyTrack := range spotifyTracks {
 		trackName := spotifyTrack.Name + " - " + spotifyTrack.Artist
 		// Reuse search processing logic
-		if err := processSearch(ctx, trackName, api, d, conf, debug); err != nil {
+		if err := processSearch(ctx, trackName, api, d, conf, debug, expand); err != nil {
 			ui.Error.Printf("❌ Failed to download '%s': %v\n", trackName, err)
 		}
 	}
 	return nil
 }
 
-func processSearch(ctx context.Context, query string, api *api.DabAPI, d *downloader.Downloader, conf *config.Config, debug bool) error {
+func processSearch(ctx context.Context, query string, api *api.DabAPI, d *downloader.Downloader, conf *config.Config, debug bool, expand bool) error {
 	// Search for track first, then album, then artist?
 	// Usually users put song names.
 	// Let's use "all" type and prefer track -> album -> artist order or just pick first result like HandleSearch(auto=true)
@@ -154,6 +154,11 @@ func processSearch(ctx context.Context, query string, api *api.DabAPI, d *downlo
 	switch itemType {
 	case "track":
 		track := item.(models.Track)
+		if expand {
+			ui.Info.Println("🎵 Expanding track to album download:", track.Album)
+			_, err := d.DownloadAlbum(ctx, track.AlbumID, conf, debug, nil, nil)
+			return err
+		}
 		ui.Info.Println("🎵 Downloading track:", track.Title)
 		return d.DownloadSingleTrack(ctx, track, debug, conf.Format, conf.Bitrate, nil, conf, nil)
 	case "album":

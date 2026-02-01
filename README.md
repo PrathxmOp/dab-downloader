@@ -123,6 +123,7 @@ Search for artists, albums, or tracks using an interactive TUI.
 *   **Smart Selection**: When selecting a single track, the CLI will offer to download the entire containing album.
 *   `--type string`: Type of content to search for (`artist`, `album`, `track`, `all`). Default: `all`.
 *   `--auto`: Automatically download the first result.
+*   `--expand`: Automatically download the full album for the selected track (skips interactive prompt).
 *   `--format string`: Target format (`flac`, `mp3`, `ogg`, `opus`). Default: `flac`.
 *   `--bitrate string`: Bitrate for lossy formats (e.g., `320`). Default: `320`.
 ```bash
@@ -154,8 +155,9 @@ dab-downloader playlist "344f44f8-..."
 
 **`batch [file_path]`**
 Process multiple downloads from a text file (one item per line). Supports Spotify URLs, DAB URLs, and search queries.
+*   `--expand`: Automatically download the full album for any tracks found via search or URLs.
 ```bash
-dab-downloader batch my_list.txt
+dab-downloader batch my_list.txt --expand
 ```
 
 ---
