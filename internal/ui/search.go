@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -136,6 +137,15 @@ func HandleSearch(ctx context.Context, api Searcher, query string, searchType st
 	if auto {
 		var selectedItems []interface{}
 		var itemTypes []string
+
+		// Prioritize tracks if query looks like an ISRC
+		isISRC := regexp.MustCompile(`^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$`).MatchString(query)
+		if isISRC && len(results.Tracks) > 0 {
+			selectedItems = append(selectedItems, results.Tracks[0])
+			itemTypes = append(itemTypes, "track")
+			return selectedItems, itemTypes, nil
+		}
+
 		if len(results.Artists) > 0 {
 			selectedItems = append(selectedItems, results.Artists[0])
 			itemTypes = append(itemTypes, "artist")

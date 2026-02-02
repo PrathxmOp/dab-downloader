@@ -138,7 +138,12 @@ func processSearch(ctx context.Context, query string, api *api.DabAPI, d *downlo
 	// or we can reuse it with auto=true.
 	// ui.HandleSearch(..., auto=true) returns the first item.
 	
-	selectedItems, itemTypes, err := ui.HandleSearch(ctx, api, query, "all", debug, true) // auto=true
+	searchType := "all"
+	if utils.IsISRC(query) {
+		searchType = "track"
+	}
+
+	selectedItems, itemTypes, err := ui.HandleSearch(ctx, api, query, searchType, debug, true) // auto=true
 	if err != nil {
 		return err
 	}

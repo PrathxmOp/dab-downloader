@@ -179,6 +179,13 @@ func RemoveSuffix(trackTitle string, suffix string) string {
 	re := regexp.MustCompile(fmt.Sprintf("(?i)( - |\\s*\\()((\\d{4} )?)?(%s(ed)?( Version)?|Digital (Master?|%s(ed)?)|Remix)( \\d{4})?(\\))?$", suffix, suffix))
 	return re.ReplaceAllString(trackTitle, "")
 }
+
+// IsISRC checks if a string matches the ISRC pattern
+func IsISRC(s string) bool {
+	re := regexp.MustCompile(`^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$`)
+	return re.MatchString(s)
+}
+
 // VerifyFileSize checks if a file exists and matches the expected size
 func VerifyFileSize(filePath string, expectedSize int64) (bool, int64, error) {
 	info, err := os.Stat(filePath)

@@ -89,10 +89,62 @@ func TestIDToString(t *testing.T) {
 		{nil, ""},
 	}
 
-	for _, test := range tests {
-		result := IDToString(test.input)
-		if result != test.expected {
-			t.Errorf("IDToString(%v) = %q; want %q", test.input, result, test.expected)
+		for _, test := range tests {
+
+			result := IDToString(test.input)
+
+			if result != test.expected {
+
+				t.Errorf("IDToString(%v) = %q; want %q", test.input, result, test.expected)
+
+			}
+
 		}
+
 	}
-}
+
+	
+
+	func TestIsISRC(t *testing.T) {
+
+		tests := []struct {
+
+			input    string
+
+			expected bool
+
+		}{
+
+			{"USPR36409921", true},
+
+			{"GBAYE0601498", true},
+
+			{"US-PR3-64-09921", false}, // hyphenated not supported by our regex
+
+			{"INVALID", false},
+
+			{"", false},
+
+			{"123456789012", false},
+
+			{"ABCDE1234567", true},
+
+		}
+
+	
+
+		for _, test := range tests {
+
+			result := IsISRC(test.input)
+
+			if result != test.expected {
+
+				t.Errorf("IsISRC(%q) = %v; want %v", test.input, result, test.expected)
+
+			}
+
+		}
+
+	}
+
+	
